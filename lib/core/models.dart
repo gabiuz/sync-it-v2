@@ -269,3 +269,44 @@ class ActivityParseException implements Exception {
   @override
   String toString() => message;
 }
+
+/// A 2D geographic coordinate for map display.
+class GeoPoint {
+  const GeoPoint({
+    required this.latitude,
+    required this.longitude,
+  });
+
+  final double latitude;
+  final double longitude;
+}
+
+/// A single downsampled sample for a Channel chart.
+class ChartSample {
+  const ChartSample({
+    required this.elapsedSeconds,
+    required this.distanceMeters,
+    required this.value,
+  });
+
+  final double elapsedSeconds;
+  final double distanceMeters;
+  final double value;
+}
+
+/// Downsampled display geometry for smooth map and chart rendering.
+class ActivityDisplayGeometry {
+  const ActivityDisplayGeometry({
+    required this.routePoints,
+    required this.heartRateSeries,
+    required this.elevationSeries,
+    required this.paceSeries,
+    required this.sourceTrackpointCount,
+  });
+
+  final List<GeoPoint> routePoints;
+  final List<ChartSample> heartRateSeries;
+  final List<ChartSample> elevationSeries;
+  final List<ChartSample> paceSeries;
+  final int sourceTrackpointCount;
+}

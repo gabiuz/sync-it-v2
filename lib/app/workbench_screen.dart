@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../core/core_engine.dart';
 import '../port/platform_io_port.dart';
+import 'channel_charts_section.dart';
+import 'lap_table_card.dart';
+import 'route_map_card.dart';
 
 class WorkbenchScreen extends StatefulWidget {
   const WorkbenchScreen({
@@ -29,6 +32,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   ExportFormat _exportFormat = ExportFormat.fit;
   bool _isExporting = false;
   String? _exportStatusMessage;
+  ActivityDisplayGeometry? _displayGeometry;
+  bool? _isMapTilesAvailable;
 
   @override
   void initState() {
@@ -37,6 +42,27 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     _titleController = TextEditingController(text: activity.title);
     _descriptionController = TextEditingController(text: activity.description);
     _sportType = activity.sportType;
+    _loadVisualInspectorData();
+  }
+
+  Future<void> _loadVisualInspectorData() async {
+    final activity = widget.initialResult.activity;
+    final onlineFuture = widget.platformIoPort.isMapTilesAvailable();
+    if (activity.trackpoints.length <= 2000) {
+      _displayGeometry = CoreEngine.buildDisplayGeometry(activity);
+      final isOnline = await onlineFuture;
+      if (!mounted) return;
+      setState(() => _isMapTilesAvailable = isOnline);
+      return;
+    }
+
+    final geometryFuture = CoreEngine.buildDisplayGeometryInIsolate(activity);
+    final results = await Future.wait<Object>([geometryFuture, onlineFuture]);
+    if (!mounted) return;
+    setState(() {
+      _displayGeometry = results[0] as ActivityDisplayGeometry;
+      _isMapTilesAvailable = results[1] as bool;
+    });
   }
 
   @override
@@ -154,6 +180,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                   sourceFileName: widget.sourceFileName,
                   currentTitle: _currentEdit.title ?? widget.initialResult.activity.title,
                   currentSportType: _sportType,
+                  displayGeometry: _displayGeometry,
+                  isMapTilesAvailable: _isMapTilesAvailable,
                 ),
                 _EditTab(
                   titleController: _titleController,
@@ -256,6 +284,8 @@ class _OverviewTab extends StatelessWidget {
     required this.sourceFileName,
     required this.currentTitle,
     required this.currentSportType,
+    required this.displayGeometry,
+    required this.isMapTilesAvailable,
   });
 
   final Activity activity;
@@ -263,6 +293,8 @@ class _OverviewTab extends StatelessWidget {
   final String sourceFileName;
   final String currentTitle;
   final SportType currentSportType;
+  final ActivityDisplayGeometry? displayGeometry;
+  final bool? isMapTilesAvailable;
 
   @override
   Widget build(BuildContext context) {
@@ -300,6 +332,19 @@ class _OverviewTab extends StatelessWidget {
             ),
           ),
         ),
+        const SizedBox(height: 12),
+        if (displayGeometry != null)
+          RouteMapCard(
+            routePoints: displayGeometry!.routePoints,
+            isOnline: isMapTilesAvailable,
+          )
+        else
+          const Card(
+            child: SizedBox(
+              height: 240,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ),
         const SizedBox(height: 12),
         Card(
           child: Column(
@@ -345,26 +390,13 @@ class _OverviewTab extends StatelessWidget {
             ],
           ),
         ),
+        if (displayGeometry != null) ...[
+          const SizedBox(height: 12),
+          ChannelChartsSection(geometry: displayGeometry!),
+        ],
         if (activity.laps.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Card(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: Text(
-                    'Lap Summaries',
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                ),
-                for (var i = 0; i < activity.laps.length; i++) ...[
-                  if (i > 0) const Divider(height: 1),
-                  _LapRow(index: i + 1, lap: activity.laps[i]),
-                ],
-              ],
-            ),
-          ),
+          LapTableCard(laps: activity.laps),
         ],
       ],
     );
@@ -399,42 +431,6 @@ class _StatRow extends StatelessWidget {
       trailing: Text(
         value,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-      ),
-    );
-  }
-}
-
-class _LapRow extends StatelessWidget {
-  const _LapRow({required this.index, required this.lap});
-
-  final int index;
-  final Lap lap;
-
-  @override
-  Widget build(BuildContext context) {
-    final distText = lap.distanceMeters != null
-        ? '${(lap.distanceMeters! / 1000.0).toStringAsFixed(2)} km'
-        : '—';
-    final durText = _OverviewTab._formatDuration(lap.duration);
-    final parts = <String>[distText, durText];
-    if (lap.avgHeartRateBpm != null) {
-      parts.add('${lap.avgHeartRateBpm} bpm');
-    }
-    if (lap.avgCadenceRpm != null) {
-      parts.add('${lap.avgCadenceRpm} rpm');
-    }
-    if (lap.calories != null) {
-      parts.add('${lap.calories} kcal');
-    }
-
-    return ListTile(
-      dense: true,
-      title: Text('Lap $index'),
-      trailing: Text(
-        parts.join(' • '),
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
               fontWeight: FontWeight.w600,
             ),
       ),
