@@ -64,10 +64,16 @@ class _SyncItShellState extends State<_SyncItShell> {
         return;
       }
 
-      final result = await CoreEngine.parseGpxInIsolate(
-        picked.bytes,
-        fileName: picked.fileName,
-      );
+      final isFit = _isFitSource(picked.fileName, picked.bytes);
+      final result = isFit
+          ? await CoreEngine.parseFitInIsolate(
+              picked.bytes,
+              fileName: picked.fileName,
+            )
+          : await CoreEngine.parseGpxInIsolate(
+              picked.bytes,
+              fileName: picked.fileName,
+            );
       if (!mounted) return;
       setState(() {
         _parseResult = result;
@@ -83,10 +89,19 @@ class _SyncItShellState extends State<_SyncItShell> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _errorMessage = 'Failed to import GPX file: $e';
+        _errorMessage = 'Failed to import Source File: $e';
         _isLoading = false;
       });
     }
+  }
+
+  static bool _isFitSource(String fileName, List<int> bytes) {
+    if (fileName.toLowerCase().endsWith('.fit')) return true;
+    return bytes.length >= 12 &&
+        bytes[8] == 0x2E &&
+        bytes[9] == 0x46 &&
+        bytes[10] == 0x49 &&
+        bytes[11] == 0x54;
   }
 
   @override

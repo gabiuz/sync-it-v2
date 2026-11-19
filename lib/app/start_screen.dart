@@ -43,7 +43,7 @@ class StartScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Offline activity file workbench. Inspect, edit, and export clean GPX files before uploading.',
+                    'Offline activity file workbench. Inspect, edit, and export clean FIT or GPX files before uploading.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colors.onSurfaceVariant,
@@ -51,6 +51,7 @@ class StartScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 32),
                   FilledButton.icon(
+                    key: const Key('import-source-button'),
                     onPressed: isLoading ? null : onImportTap,
                     icon: isLoading
                         ? const SizedBox(
@@ -60,7 +61,9 @@ class StartScreen extends StatelessWidget {
                           )
                         : const Icon(Icons.file_open_outlined),
                     label: Text(
-                      isLoading ? 'Parsing GPX...' : 'Import GPX Source File',
+                      isLoading
+                          ? 'Parsing Source File...'
+                          : 'Import Source File',
                     ),
                   ),
                   if (errorMessage != null) ...[

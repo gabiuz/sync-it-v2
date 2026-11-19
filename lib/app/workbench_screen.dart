@@ -26,6 +26,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   late SportType _sportType;
+  ExportFormat _exportFormat = ExportFormat.fit;
   bool _isExporting = false;
   String? _exportStatusMessage;
 
@@ -59,7 +60,22 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
         .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
         .replaceAll(RegExp(r'^_+|_+$'), '');
     final base = raw.isEmpty ? 'activity' : raw;
-    return '$base.gpx';
+    return '$base.${_exportFormat.extension}';
+  }
+
+  Future<ExportResult> _buildExportResult() {
+    switch (_exportFormat) {
+      case ExportFormat.fit:
+        return CoreEngine.exportFitInIsolate(
+          widget.initialResult.activity,
+          _currentEdit,
+        );
+      case ExportFormat.gpx:
+        return CoreEngine.exportGpxInIsolate(
+          widget.initialResult.activity,
+          _currentEdit,
+        );
+    }
   }
 
   Future<void> _handleSave() async {
@@ -68,10 +84,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       _exportStatusMessage = null;
     });
     try {
-      final result = await CoreEngine.exportGpxInIsolate(
-        widget.initialResult.activity,
-        _currentEdit,
-      );
+      final result = await _buildExportResult();
       final saved = await widget.platformIoPort.saveExportFile(
         suggestedFileName: _suggestedExportFileName,
         bytes: result.bytes,
@@ -95,10 +108,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       _exportStatusMessage = null;
     });
     try {
-      final result = await CoreEngine.exportGpxInIsolate(
-        widget.initialResult.activity,
-        _currentEdit,
-      );
+      final result = await _buildExportResult();
       await widget.platformIoPort.shareExportFile(
         fileName: _suggestedExportFileName,
         bytes: result.bytes,
@@ -152,9 +162,16 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                   },
                 ),
                 _ExportTab(
+                  exportFormat: _exportFormat,
                   suggestedFileName: _suggestedExportFileName,
                   isExporting: _isExporting,
                   statusMessage: _exportStatusMessage,
+                  onFormatChanged: (format) {
+                    setState(() {
+                      _exportFormat = format;
+                      _exportStatusMessage = null;
+                    });
+                  },
                   onSave: _handleSave,
                   onShare: _handleShare,
                 ),
@@ -301,6 +318,25 @@ class _OverviewTab extends StatelessWidget {
                 label: 'Trackpoints',
                 value: '${summary.trackpointCount}',
               ),
+              const Divider(height: 1),
+              _StatRow(
+                label: 'Laps',
+                value: '${summary.lapCount}',
+              ),
+              if (summary.calories != null) ...[
+                const Divider(height: 1),
+                _StatRow(
+                  label: 'Calories',
+                  value: '${summary.calories} kcal',
+                ),
+              ],
+              if (summary.deviceInfo != null) ...[
+                const Divider(height: 1),
+                _StatRow(
+                  label: 'Device',
+                  value: summary.deviceInfo!,
+                ),
+              ],
             ],
           ),
         ),
@@ -420,30 +456,52 @@ class _EditTab extends StatelessWidget {
 
 class _ExportTab extends StatelessWidget {
   const _ExportTab({
+    required this.exportFormat,
     required this.suggestedFileName,
     required this.isExporting,
     required this.statusMessage,
+    required this.onFormatChanged,
     required this.onSave,
     required this.onShare,
   });
 
+  final ExportFormat exportFormat;
   final String suggestedFileName;
   final bool isExporting;
   final String? statusMessage;
+  final ValueChanged<ExportFormat> onFormatChanged;
   final VoidCallback onSave;
   final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
+    final shortLabel = exportFormat.extension.toUpperCase();
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          SegmentedButton<ExportFormat>(
+            key: const Key('export-format-selector'),
+            segments: [
+              for (final format in ExportFormat.values)
+                ButtonSegment<ExportFormat>(
+                  value: format,
+                  label: Text(format.extension.toUpperCase()),
+                ),
+            ],
+            selected: {exportFormat},
+            onSelectionChanged: (selection) {
+              if (selection.isNotEmpty) {
+                onFormatChanged(selection.first);
+              }
+            },
+          ),
+          const SizedBox(height: 16),
           Card(
             child: ListTile(
               leading: const Icon(Icons.description_outlined),
-              title: const Text('Export File (GPX 1.1)'),
+              title: Text('Export File (${exportFormat.displayName})'),
               subtitle: Text(suggestedFileName),
             ),
           ),
@@ -451,13 +509,13 @@ class _ExportTab extends StatelessWidget {
           FilledButton.icon(
             onPressed: isExporting ? null : onSave,
             icon: const Icon(Icons.save_alt),
-            label: const Text('Save GPX'),
+            label: Text('Save $shortLabel'),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: isExporting ? null : onShare,
             icon: const Icon(Icons.share),
-            label: const Text('Share GPX'),
+            label: Text('Share $shortLabel'),
           ),
           if (statusMessage != null) ...[
             const SizedBox(height: 16),

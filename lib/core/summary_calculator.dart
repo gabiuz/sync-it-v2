@@ -65,8 +65,12 @@ class SummaryCalculator {
       }
     }
 
-    final avgPace = (gpsDistance > 0 && duration.inMilliseconds > 0)
-        ? (duration.inMilliseconds / 1000.0) / (gpsDistance / 1000.0)
+    final effectiveDistance = gpsDistance > 0
+        ? gpsDistance
+        : (points.last.cumulativeDistanceMeters ?? 0.0);
+
+    final avgPace = (effectiveDistance > 0 && duration.inMilliseconds > 0)
+        ? (duration.inMilliseconds / 1000.0) / (effectiveDistance / 1000.0)
         : null;
 
     return ActivitySummary(
@@ -74,11 +78,14 @@ class SummaryCalculator {
       startTime: startTime,
       endTime: endTime,
       duration: duration,
-      gpsDistanceMeters: gpsDistance,
+      gpsDistanceMeters: effectiveDistance,
       elevationGainMeters: elevationGain,
       avgHeartRateBpm: hrCount > 0 ? (hrSum / hrCount).round() : null,
       maxHeartRateBpm: hrCount > 0 ? hrMax : null,
       avgPaceSecondsPerKm: avgPace,
+      calories: activity.calories,
+      deviceInfo: activity.deviceInfo,
+      lapCount: activity.laps.isEmpty ? 1 : activity.laps.length,
     );
   }
 

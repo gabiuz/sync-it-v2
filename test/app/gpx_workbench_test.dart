@@ -85,7 +85,7 @@ void main() {
 
     // Start screen
     expect(find.text('Sync-It'), findsOneWidget);
-    await tester.tap(find.text('Import GPX Source File'));
+    await tester.tap(find.byKey(const Key('import-source-button')));
     await tester.pump();
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await tester.pumpAndSettle();
@@ -117,8 +117,11 @@ void main() {
     await tester.tap(find.text('Cycling').last);
     await tester.pumpAndSettle();
 
-    // Export tab: Save & Share
+    // Export tab: switch to GPX (default is FIT), then Save & Share
     await tester.tap(find.text('Export'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('GPX'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Save GPX'));
@@ -148,7 +151,7 @@ void main() {
     );
 
     await tester.pumpWidget(SyncItApp(platformIoPort: fakePort));
-    await tester.tap(find.text('Import GPX Source File'));
+    await tester.tap(find.byKey(const Key('import-source-button')));
     await tester.pump();
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await tester.pumpAndSettle();
