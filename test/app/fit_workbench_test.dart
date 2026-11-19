@@ -40,6 +40,12 @@ class _FakePlatformIoPort implements PlatformIoPort {
 
   @override
   Future<bool> isMapTilesAvailable() async => false;
+
+  @override
+  Future<void> copyToClipboard(String text) async {}
+
+  @override
+  Future<bool> launchExternalUrl(Uri url) async => true;
 }
 
 Uint8List _buildFitWithVendorExtension() {
@@ -164,13 +170,13 @@ void main() {
     // Export tab: defaults to .fit
     await tester.tap(find.text('Export'));
     await tester.pumpAndSettle();
-    expect(find.text('tempo_run.fit'), findsOneWidget);
+    expect(find.text('2026-11-19_tempo_run.fit'), findsOneWidget);
 
     await tester.tap(find.text('Save FIT'));
     await tester.pump();
     await _pumpUntilSettledAsync(tester);
 
-    expect(fakePort.lastSavedFileName, 'tempo_run.fit');
+    expect(fakePort.lastSavedFileName, '2026-11-19_tempo_run.fit');
     expect(fakePort.lastSavedBytes, isNotNull);
     final reparsedFit = CoreEngine.parseFit(fakePort.lastSavedBytes!);
     expect(reparsedFit.activity.calories, 400);
@@ -178,13 +184,13 @@ void main() {
     // One-tap switch to GPX
     await tester.tap(find.text('GPX'));
     await tester.pumpAndSettle();
-    expect(find.text('tempo_run.gpx'), findsOneWidget);
+    expect(find.text('2026-11-19_tempo_run.gpx'), findsOneWidget);
 
     await tester.tap(find.text('Save GPX'));
     await tester.pump();
     await _pumpUntilSettledAsync(tester);
 
-    expect(fakePort.lastSavedFileName, 'tempo_run.gpx');
+    expect(fakePort.lastSavedFileName, '2026-11-19_tempo_run.gpx');
     final reparsedGpx = CoreEngine.parseGpx(fakePort.lastSavedBytes!);
     expect(reparsedGpx.activity.title, 'Tempo Run');
   });
@@ -216,13 +222,13 @@ void main() {
 
     await tester.tap(find.text('Export'));
     await tester.pumpAndSettle();
-    expect(find.text('morning_walk.fit'), findsOneWidget);
+    expect(find.text('2026-11-19_morning_walk.fit'), findsOneWidget);
 
     await tester.tap(find.text('Save FIT'));
     await tester.pump();
     await _pumpUntilSettledAsync(tester);
 
-    expect(fakePort.lastSavedFileName, 'morning_walk.fit');
+    expect(fakePort.lastSavedFileName, '2026-11-19_morning_walk.fit');
     final reparsedFit = CoreEngine.parseFit(fakePort.lastSavedBytes!);
     expect(reparsedFit.activity.sportType, SportType.walking);
   });

@@ -40,6 +40,12 @@ class FakePlatformIoPort implements PlatformIoPort {
 
   @override
   Future<bool> isMapTilesAvailable() async => false;
+
+  @override
+  Future<void> copyToClipboard(String text) async {}
+
+  @override
+  Future<bool> launchExternalUrl(Uri url) async => true;
 }
 
 Uint8List _utf8(String s) => Uint8List.fromList(utf8.encode(s));

@@ -156,6 +156,12 @@ class _InspectorFakePort implements PlatformIoPort {
 
   @override
   Future<bool> isMapTilesAvailable() async => online;
+
+  @override
+  Future<void> copyToClipboard(String text) async {}
+
+  @override
+  Future<bool> launchExternalUrl(Uri url) async => true;
 }
 
 Future<void> _pumpUntilSettledAsync(WidgetTester tester) async {

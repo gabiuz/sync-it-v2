@@ -27,4 +27,10 @@ abstract interface class PlatformIoPort {
 
   /// Returns whether online OpenStreetMap tiles are reachable.
   Future<bool> isMapTilesAvailable();
+
+  /// Copies [text] to the system clipboard.
+  Future<void> copyToClipboard(String text);
+
+  /// Launches [url] in an external browser or app.
+  Future<bool> launchExternalUrl(Uri url);
 }

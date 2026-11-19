@@ -40,6 +40,12 @@ class _FakePlatformIoPort implements PlatformIoPort {
 
   @override
   Future<bool> isMapTilesAvailable() async => false;
+
+  @override
+  Future<void> copyToClipboard(String text) async {}
+
+  @override
+  Future<bool> launchExternalUrl(Uri url) async => true;
 }
 
 Future<void> _pumpUntilSettledAsync(WidgetTester tester) async {
@@ -134,13 +140,13 @@ void main() {
 
     await tester.tap(find.text('TCX'));
     await tester.pumpAndSettle();
-    expect(find.text('huawei_tempo.tcx'), findsOneWidget);
+    expect(find.text('2026-11-19_huawei_tempo.tcx'), findsOneWidget);
 
     await tester.tap(find.text('Save TCX'));
     await tester.pump();
     await _pumpUntilSettledAsync(tester);
 
-    expect(fakePort.lastSavedFileName, 'huawei_tempo.tcx');
+    expect(fakePort.lastSavedFileName, '2026-11-19_huawei_tempo.tcx');
     expect(fakePort.lastSavedBytes, isNotNull);
     final reparsedTcx = CoreEngine.parseTcx(fakePort.lastSavedBytes!);
     expect(reparsedTcx.activity.trackpoints.last.cumulativeDistanceMeters, 230.0);
@@ -148,13 +154,13 @@ void main() {
     // Switch to GPX and save
     await tester.tap(find.text('GPX'));
     await tester.pumpAndSettle();
-    expect(find.text('huawei_tempo.gpx'), findsOneWidget);
+    expect(find.text('2026-11-19_huawei_tempo.gpx'), findsOneWidget);
 
     await tester.tap(find.text('Save GPX'));
     await tester.pump();
     await _pumpUntilSettledAsync(tester);
 
-    expect(fakePort.lastSavedFileName, 'huawei_tempo.gpx');
+    expect(fakePort.lastSavedFileName, '2026-11-19_huawei_tempo.gpx');
     final reparsedGpx = CoreEngine.parseGpx(fakePort.lastSavedBytes!);
     expect(reparsedGpx.activity.title, 'Huawei Tempo');
   });
