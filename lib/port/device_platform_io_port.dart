@@ -15,7 +15,7 @@ class DevicePlatformIoPort implements PlatformIoPort {
   Future<PickedSourceFile?> pickSourceFile() async {
     final file = await FilePicker.pickFile(
       type: FileType.custom,
-      allowedExtensions: const ['gpx'],
+      allowedExtensions: const ['gpx', 'fit'],
     );
     if (file == null) return null;
     final bytes = await file.readAsBytes();
@@ -34,7 +34,7 @@ class DevicePlatformIoPort implements PlatformIoPort {
       dialogTitle: 'Save Export File',
       fileName: suggestedFileName,
       bytes: bytes,
-      mimeType: 'application/gpx+xml',
+      mimeType: _mimeTypeForFileName(suggestedFileName),
     );
     return savedUri != null;
   }
@@ -49,9 +49,18 @@ class DevicePlatformIoPort implements PlatformIoPort {
     await tempFile.writeAsBytes(bytes, flush: true);
     await SharePlus.instance.share(
       ShareParams(
-        files: [XFile(tempFile.path, mimeType: 'application/gpx+xml')],
+        files: [
+          XFile(tempFile.path, mimeType: _mimeTypeForFileName(fileName)),
+        ],
         subject: fileName,
       ),
     );
+  }
+
+  static String _mimeTypeForFileName(String fileName) {
+    if (fileName.toLowerCase().endsWith('.fit')) {
+      return 'application/octet-stream';
+    }
+    return 'application/gpx+xml';
   }
 }

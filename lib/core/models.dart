@@ -8,6 +8,18 @@ enum Channel {
   heartRate,
   cadence,
   power,
+  temperature,
+}
+
+/// Supported Export File formats.
+enum ExportFormat {
+  fit('fit', 'FIT'),
+  gpx('gpx', 'GPX 1.1');
+
+  const ExportFormat(this.extension, this.displayName);
+
+  final String extension;
+  final String displayName;
 }
 
 /// Canonical sport classification mapped across GPX/TCX/FIT.
@@ -84,6 +96,7 @@ class Trackpoint {
     this.heartRateBpm,
     this.cadenceRpm,
     this.powerWatts,
+    this.temperatureCelsius,
   });
 
   final DateTime timestamp;
@@ -94,6 +107,7 @@ class Trackpoint {
   final int? heartRateBpm;
   final int? cadenceRpm;
   final int? powerWatts;
+  final int? temperatureCelsius;
 }
 
 /// A contiguous time-bounded interval within an [Activity].
@@ -102,11 +116,15 @@ class Lap {
     required this.startTime,
     required this.endTime,
     this.distanceMeters,
+    this.avgHeartRateBpm,
+    this.maxHeartRateBpm,
   });
 
   final DateTime startTime;
   final DateTime endTime;
   final double? distanceMeters;
+  final int? avgHeartRateBpm;
+  final int? maxHeartRateBpm;
 }
 
 /// Format-independent representation of a single workout.
@@ -118,6 +136,8 @@ class Activity {
     required this.trackpoints,
     required this.laps,
     required this.availableChannels,
+    this.calories,
+    this.deviceInfo,
   });
 
   final String title;
@@ -126,6 +146,8 @@ class Activity {
   final List<Trackpoint> trackpoints;
   final List<Lap> laps;
   final Set<Channel> availableChannels;
+  final int? calories;
+  final String? deviceInfo;
 
   Activity copyWith({
     String? title,
@@ -134,6 +156,8 @@ class Activity {
     List<Trackpoint>? trackpoints,
     List<Lap>? laps,
     Set<Channel>? availableChannels,
+    int? calories,
+    String? deviceInfo,
   }) {
     return Activity(
       title: title ?? this.title,
@@ -142,6 +166,8 @@ class Activity {
       trackpoints: trackpoints ?? this.trackpoints,
       laps: laps ?? this.laps,
       availableChannels: availableChannels ?? this.availableChannels,
+      calories: calories ?? this.calories,
+      deviceInfo: deviceInfo ?? this.deviceInfo,
     );
   }
 }
@@ -158,6 +184,9 @@ class ActivitySummary {
     this.avgHeartRateBpm,
     this.maxHeartRateBpm,
     this.avgPaceSecondsPerKm,
+    this.calories,
+    this.deviceInfo,
+    this.lapCount = 1,
   });
 
   final int trackpointCount;
@@ -169,6 +198,9 @@ class ActivitySummary {
   final int? avgHeartRateBpm;
   final int? maxHeartRateBpm;
   final double? avgPaceSecondsPerKm;
+  final int? calories;
+  final String? deviceInfo;
+  final int lapCount;
 }
 
 /// User edits applied when producing an Export File.
