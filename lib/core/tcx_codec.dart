@@ -342,17 +342,7 @@ class TcxCodec {
   }
 
   static ExportResult export(Activity activity, ActivityEdit edit) {
-    final baseActivity = edit.distanceOverrideMeters != null
-        ? SummaryCalculator.applyDistanceOverride(
-            activity,
-            edit.distanceOverrideMeters,
-          )
-        : activity;
-    final updatedMeta = baseActivity.copyWith(
-      title: edit.title ?? baseActivity.title,
-      description: edit.description ?? baseActivity.description,
-      sportType: edit.sportType ?? baseActivity.sportType,
-    );
+    final updatedMeta = SummaryCalculator.applyEdits(activity, edit);
 
     final finalPoints = _ensureCumulativeDistance(updatedMeta.trackpoints);
     final lapMetas = updatedMeta.laps.isEmpty
@@ -434,10 +424,12 @@ class TcxCodec {
                       'DistanceMeters',
                       nest: (lap.distanceMeters ?? 0.0).toStringAsFixed(2),
                     );
-                    builder.element(
-                      'Calories',
-                      nest: (lap.calories ?? 0).toString(),
-                    );
+                    if (lap.calories != null) {
+                      builder.element(
+                        'Calories',
+                        nest: lap.calories.toString(),
+                      );
+                    }
                     if (lap.avgHeartRateBpm != null) {
                       builder.element('AverageHeartRateBpm', nest: () {
                         builder.element(

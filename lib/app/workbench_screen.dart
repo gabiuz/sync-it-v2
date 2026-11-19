@@ -44,6 +44,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   late SportType _sportType;
   double? _distanceOverrideMeters;
   ExportFormat _exportFormat = ExportFormat.fit;
+  final Set<StrippableChannel> _strippedChannels = <StrippableChannel>{};
   bool _isExporting = false;
   String? _exportStatusMessage;
   bool _titleCopied = false;
@@ -119,7 +120,18 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
         description: _descriptionController.text.trim(),
         sportType: _sportType,
         distanceOverrideMeters: _distanceOverrideMeters,
+        strippedChannels: Set.unmodifiable(_strippedChannels),
       );
+
+  void _toggleStrippableChannel(StrippableChannel channel, bool keep) {
+    setState(() {
+      if (keep) {
+        _strippedChannels.remove(channel);
+      } else {
+        _strippedChannels.add(channel);
+      }
+    });
+  }
 
   void _applyNudgeDistanceOverride(double targetMeters) {
     setState(() {
@@ -348,7 +360,9 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                   onDistanceOverrideChanged: _onDistanceOverrideChanged,
                   onClearDistanceOverride: _clearDistanceOverride,
                   sportType: _sportType,
-                  availableChannels: widget.initialResult.activity.availableChannels,
+                  activity: widget.initialResult.activity,
+                  strippedChannels: _strippedChannels,
+                  onToggleChannel: _toggleStrippableChannel,
                   onSportChanged: (sport) {
                     if (sport != null) {
                       setState(() => _sportType = sport);
@@ -358,6 +372,11 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                 _ExportTab(
                   exportFormat: _exportFormat,
                   hasDistanceOverride: _distanceOverrideMeters != null,
+                  exportWarnings: CoreEngine.analyzeExportWarnings(
+                    widget.initialResult.activity,
+                    _currentEdit,
+                    _exportFormat,
+                  ),
                   fileNameController: _fileNameController,
                   isExporting: _isExporting,
                   statusMessage: _exportStatusMessage,
@@ -765,7 +784,9 @@ class _EditTab extends StatelessWidget {
     required this.onDistanceOverrideChanged,
     required this.onClearDistanceOverride,
     required this.sportType,
-    required this.availableChannels,
+    required this.activity,
+    required this.strippedChannels,
+    required this.onToggleChannel,
     required this.onSportChanged,
   });
 
@@ -777,8 +798,34 @@ class _EditTab extends StatelessWidget {
   final ValueChanged<String> onDistanceOverrideChanged;
   final VoidCallback onClearDistanceOverride;
   final SportType sportType;
-  final Set<Channel> availableChannels;
+  final Activity activity;
+  final Set<StrippableChannel> strippedChannels;
+  final void Function(StrippableChannel channel, bool keep) onToggleChannel;
   final ValueChanged<SportType?> onSportChanged;
+
+  bool _isChannelPresent(StrippableChannel channel) {
+    switch (channel) {
+      case StrippableChannel.heartRate:
+        return activity.availableChannels.contains(Channel.heartRate);
+      case StrippableChannel.gps:
+        return activity.availableChannels.contains(Channel.gps);
+      case StrippableChannel.elevation:
+        return activity.availableChannels.contains(Channel.elevation);
+      case StrippableChannel.cadence:
+        return activity.availableChannels.contains(Channel.cadence);
+      case StrippableChannel.power:
+        return activity.availableChannels.contains(Channel.power);
+      case StrippableChannel.temperature:
+        return activity.availableChannels.contains(Channel.temperature);
+      case StrippableChannel.calories:
+        return activity.calories != null;
+      case StrippableChannel.laps:
+        return activity.laps.isNotEmpty;
+      case StrippableChannel.deviceInfo:
+        return activity.deviceInfo != null &&
+            activity.deviceInfo!.trim().isNotEmpty;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -844,17 +891,79 @@ class _EditTab extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         Text(
-          'Detected Channels',
+          'Channel Controls (Keep / Strip)',
           style: Theme.of(context).textTheme.titleSmall,
         ),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final channel in availableChannels)
-              Chip(label: Text(channel.name)),
-          ],
+        Card(
+          child: Column(
+            children: [
+              for (final channel in StrippableChannel.values) ...[
+                Builder(
+                  builder: (context) {
+                    final isPresent = _isChannelPresent(channel);
+                    final isKept = !strippedChannels.contains(channel);
+                    final subtitleText = !isPresent
+                        ? 'Not present in loaded Activity'
+                        : (channel == StrippableChannel.laps &&
+                                activity.laps.length > 1)
+                            ? 'Present (${activity.laps.length} Laps)'
+                            : (isKept
+                                ? 'Present — keep on export'
+                                : 'Present — stripped on export');
+                    return SwitchListTile(
+                      key: Key('channel-toggle-${channel.name}'),
+                      title: Text(channel.displayName),
+                      subtitle: Text(subtitleText),
+                      value: isPresent && isKept,
+                      onChanged: isPresent
+                          ? (keep) => onToggleChannel(channel, keep)
+                          : null,
+                    );
+                  },
+                ),
+                if (channel == StrippableChannel.deviceInfo &&
+                    strippedChannels.contains(StrippableChannel.deviceInfo))
+                  Padding(
+                    key: const Key('device-info-strip-note'),
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.tertiaryContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            size: 18,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onTertiaryContainer,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Stripping Device / Creator Info means target platforms such as Strava may apply automatic elevation correction or re-evaluate stats.',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onTertiaryContainer,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ],
+          ),
         ),
       ],
     );
@@ -865,6 +974,7 @@ class _ExportTab extends StatelessWidget {
   const _ExportTab({
     required this.exportFormat,
     required this.hasDistanceOverride,
+    required this.exportWarnings,
     required this.fileNameController,
     required this.isExporting,
     required this.statusMessage,
@@ -881,6 +991,7 @@ class _ExportTab extends StatelessWidget {
 
   final ExportFormat exportFormat;
   final bool hasDistanceOverride;
+  final List<ExportWarning> exportWarnings;
   final TextEditingController fileNameController;
   final bool isExporting;
   final String? statusMessage;
@@ -897,7 +1008,11 @@ class _ExportTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shortLabel = exportFormat.extension.toUpperCase();
+    final hasBlockingWarning = exportWarnings.any((w) => w.isBlocking);
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     return ListView(
+      key: const Key('export-tab-list'),
       padding: const EdgeInsets.all(16),
       children: [
         SegmentedButton<ExportFormat>(
@@ -927,57 +1042,43 @@ class _ExportTab extends StatelessWidget {
             border: const OutlineInputBorder(),
           ),
         ),
-        if (hasDistanceOverride && exportFormat == ExportFormat.gpx) ...[
-          const SizedBox(height: 16),
-          Card(
-            key: const Key('gpx-distance-override-warning'),
-            color: Theme.of(context).colorScheme.errorContainer,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
-                    color: Theme.of(context).colorScheme.onErrorContainer,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'GPX 1.1 cannot carry cumulative distance. Your Distance Override will be dropped on GPX export—choose FIT or TCX to preserve it.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color:
-                                Theme.of(context).colorScheme.onErrorContainer,
-                          ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+        for (final warning in exportWarnings.where(
+          (w) =>
+              w.isBlocking ||
+              (hasDistanceOverride &&
+                  exportFormat == ExportFormat.gpx &&
+                  w.code == ExportWarningCode.gpxDropsCumulativeDistance),
+        )) ...[
+          const SizedBox(height: 12),
+          _ExportWarningCard(
+            key: warning.isBlocking
+                ? const Key('export-blocking-warning')
+                : const Key('gpx-distance-override-warning'),
+            warning: warning,
           ),
         ],
         const SizedBox(height: 20),
         FilledButton.icon(
-          onPressed: isExporting ? null : onSave,
+          onPressed: (isExporting || hasBlockingWarning) ? null : onSave,
           icon: const Icon(Icons.save_alt),
           label: Text('Save $shortLabel'),
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          onPressed: isExporting ? null : onShare,
+          onPressed: (isExporting || hasBlockingWarning) ? null : onShare,
           icon: const Icon(Icons.share),
           label: Text('Share $shortLabel'),
         ),
         if (statusMessage != null) ...[
           const SizedBox(height: 16),
           Card(
-            color: Theme.of(context).colorScheme.primaryContainer,
+            color: colors.primaryContainer,
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Text(
                 statusMessage!,
                 style: TextStyle(
-                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  color: colors.onPrimaryContainer,
                 ),
               ),
             ),
@@ -993,14 +1094,14 @@ class _ExportTab extends StatelessWidget {
               children: [
                 Text(
                   'Strava Upload Helper',
-                  style: Theme.of(context).textTheme.titleSmall,
+                  style: textTheme.titleSmall,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Copy your edited metadata and open Strava\'s manual upload page.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                  style: textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Wrap(
@@ -1031,10 +1132,10 @@ class _ExportTab extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     titleCopied ? 'Title copied' : 'Description copied',
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    style: textTheme.labelMedium?.copyWith(
+                      color: colors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 12),
@@ -1048,7 +1149,65 @@ class _ExportTab extends StatelessWidget {
             ),
           ),
         ),
+        for (final warning in exportWarnings.where(
+          (w) =>
+              !w.isBlocking &&
+              !(hasDistanceOverride &&
+                  exportFormat == ExportFormat.gpx &&
+                  w.code == ExportWarningCode.gpxDropsCumulativeDistance),
+        )) ...[
+          const SizedBox(height: 12),
+          _ExportWarningCard(
+            key: Key('export-warning-${warning.code.name}'),
+            warning: warning,
+          ),
+        ],
       ],
+    );
+  }
+}
+
+class _ExportWarningCard extends StatelessWidget {
+  const _ExportWarningCard({
+    super.key,
+    required this.warning,
+  });
+
+  final ExportWarning warning;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return Card(
+      color: warning.isBlocking
+          ? colors.errorContainer
+          : colors.tertiaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              warning.isBlocking ? Icons.block : Icons.warning_amber_rounded,
+              color: warning.isBlocking
+                  ? colors.onErrorContainer
+                  : colors.onTertiaryContainer,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                warning.message,
+                style: textTheme.bodySmall?.copyWith(
+                  color: warning.isBlocking
+                      ? colors.onErrorContainer
+                      : colors.onTertiaryContainer,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

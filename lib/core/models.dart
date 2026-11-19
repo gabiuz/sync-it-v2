@@ -11,6 +11,23 @@ enum Channel {
   temperature,
 }
 
+/// Channels and metadata blocks that can be toggled keep/strip before export.
+enum StrippableChannel {
+  heartRate('Heart Rate'),
+  gps('GPS Position'),
+  elevation('Elevation'),
+  cadence('Cadence'),
+  power('Power'),
+  temperature('Temperature'),
+  calories('Calories'),
+  laps('Laps'),
+  deviceInfo('Device / Creator Info');
+
+  const StrippableChannel(this.displayName);
+
+  final String displayName;
+}
+
 /// Supported Export File formats.
 enum ExportFormat {
   fit('fit', 'FIT'),
@@ -89,6 +106,30 @@ class Diagnostic {
   final DiagnosticSeverity severity;
   final String message;
   final int count;
+}
+
+/// Machine-identifiable lossy-export warning code.
+enum ExportWarningCode {
+  stravaIgnoresManualUploadTitle,
+  gpxRequiresGps,
+  gpxDropsCumulativeDistance,
+  gpxDropsLapsAndCalories,
+  gpxDropsPowerAndTemperature,
+  tcxNarrowsSportCategory,
+  tcxDropsTemperature,
+}
+
+/// Format-specific lossy-export or blocking warning surfaced on the Export tab.
+class ExportWarning {
+  const ExportWarning({
+    required this.code,
+    required this.message,
+    this.isBlocking = false,
+  });
+
+  final ExportWarningCode code;
+  final String message;
+  final bool isBlocking;
 }
 
 /// A single timestamped sample along an [Activity]'s timeline.
@@ -251,12 +292,14 @@ class ActivityEdit {
     this.description,
     this.sportType,
     this.distanceOverrideMeters,
+    this.strippedChannels = const {},
   });
 
   final String? title;
   final String? description;
   final SportType? sportType;
   final double? distanceOverrideMeters;
+  final Set<StrippableChannel> strippedChannels;
 }
 
 /// Result returned by parsing a Source File.

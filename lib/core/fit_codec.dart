@@ -828,17 +828,7 @@ class FitCodec {
   }
 
   static ExportResult export(Activity activity, ActivityEdit edit) {
-    final baseActivity = edit.distanceOverrideMeters != null
-        ? SummaryCalculator.applyDistanceOverride(
-            activity,
-            edit.distanceOverrideMeters,
-          )
-        : activity;
-    final updated = baseActivity.copyWith(
-      title: edit.title ?? baseActivity.title,
-      description: edit.description ?? baseActivity.description,
-      sportType: edit.sportType ?? baseActivity.sportType,
-    );
+    final updated = SummaryCalculator.applyEdits(activity, edit);
 
     final points = _ensureCumulativeDistances(updated.trackpoints);
     final updatedActivity = updated.copyWith(
@@ -887,9 +877,11 @@ class FitCodec {
     dataBuilder.addByte(4); // file_type = activity
     _writeUint16(
       dataBuilder,
-      _inferManufacturerId(updatedActivity.deviceInfo),
+      hasDeviceInfo
+          ? _inferManufacturerId(updatedActivity.deviceInfo)
+          : 0xFFFF,
     );
-    _writeUint16(dataBuilder, 1); // product
+    _writeUint16(dataBuilder, hasDeviceInfo ? 1 : 0xFFFF); // product
     _writeUint32(dataBuilder, 10001); // serial_number
     _writeUint32(dataBuilder, startFit);
     if (hasDeviceInfo) {
@@ -908,26 +900,26 @@ class FitCodec {
     _writeDataHeader(dataBuilder, localType: 1);
     _writeUint16(dataBuilder, 100);
 
-    // 3. device_info (local 2, global 23)
-    _writeDefinition(
-      dataBuilder,
-      localType: 2,
-      globalMsgNum: _mesgDeviceInfo,
-      fields: [
-        const _FitFieldDef(253, 4, 0x86), // timestamp
-        const _FitFieldDef(2, 2, 0x84), // manufacturer
-        const _FitFieldDef(4, 2, 0x84), // product
-        if (hasDeviceInfo) const _FitFieldDef(27, 32, 0x07), // product_name
-      ],
-    );
-    _writeDataHeader(dataBuilder, localType: 2);
-    _writeUint32(dataBuilder, startFit);
-    _writeUint16(
-      dataBuilder,
-      _inferManufacturerId(updatedActivity.deviceInfo),
-    );
-    _writeUint16(dataBuilder, 1);
+    // 3. device_info (local 2, global 23) — omitted when deviceInfo is stripped
     if (hasDeviceInfo) {
+      _writeDefinition(
+        dataBuilder,
+        localType: 2,
+        globalMsgNum: _mesgDeviceInfo,
+        fields: const [
+          _FitFieldDef(253, 4, 0x86), // timestamp
+          _FitFieldDef(2, 2, 0x84), // manufacturer
+          _FitFieldDef(4, 2, 0x84), // product
+          _FitFieldDef(27, 32, 0x07), // product_name
+        ],
+      );
+      _writeDataHeader(dataBuilder, localType: 2);
+      _writeUint32(dataBuilder, startFit);
+      _writeUint16(
+        dataBuilder,
+        _inferManufacturerId(updatedActivity.deviceInfo),
+      );
+      _writeUint16(dataBuilder, 1);
       dataBuilder.add(deviceNameBytes);
     }
 
