@@ -828,10 +828,16 @@ class FitCodec {
   }
 
   static ExportResult export(Activity activity, ActivityEdit edit) {
-    final updated = activity.copyWith(
-      title: edit.title ?? activity.title,
-      description: edit.description ?? activity.description,
-      sportType: edit.sportType ?? activity.sportType,
+    final baseActivity = edit.distanceOverrideMeters != null
+        ? SummaryCalculator.applyDistanceOverride(
+            activity,
+            edit.distanceOverrideMeters,
+          )
+        : activity;
+    final updated = baseActivity.copyWith(
+      title: edit.title ?? baseActivity.title,
+      description: edit.description ?? baseActivity.description,
+      sportType: edit.sportType ?? baseActivity.sportType,
     );
 
     final points = _ensureCumulativeDistances(updated.trackpoints);

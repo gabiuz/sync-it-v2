@@ -39,8 +39,10 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   late TextEditingController _fileNameController;
+  late TextEditingController _distanceOverrideController;
   bool _hasCustomFileName = false;
   late SportType _sportType;
+  double? _distanceOverrideMeters;
   ExportFormat _exportFormat = ExportFormat.fit;
   bool _isExporting = false;
   String? _exportStatusMessage;
@@ -57,8 +59,21 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     _descriptionController = TextEditingController(text: activity.description);
     _sportType = activity.sportType;
     _fileNameController = TextEditingController(text: _smartDefaultFileName);
+    _distanceOverrideController = TextEditingController();
     _titleController.addListener(_onTitleChanged);
     _loadVisualInspectorData();
+  }
+
+  @override
+  void didUpdateWidget(covariant WorkbenchScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.unitSystem != widget.unitSystem &&
+        _distanceOverrideMeters != null) {
+      _distanceOverrideController.text = formatDistanceInput(
+        _distanceOverrideMeters!,
+        units: widget.unitSystem,
+      );
+    }
   }
 
   void _onTitleChanged() {
@@ -93,6 +108,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     _titleController.dispose();
     _descriptionController.dispose();
     _fileNameController.dispose();
+    _distanceOverrideController.dispose();
     super.dispose();
   }
 
@@ -102,7 +118,34 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
             : _titleController.text.trim(),
         description: _descriptionController.text.trim(),
         sportType: _sportType,
+        distanceOverrideMeters: _distanceOverrideMeters,
       );
+
+  void _applyNudgeDistanceOverride(double targetMeters) {
+    setState(() {
+      _distanceOverrideMeters = targetMeters;
+      _distanceOverrideController.text = formatDistanceInput(
+        targetMeters,
+        units: widget.unitSystem,
+      );
+    });
+  }
+
+  void _onDistanceOverrideChanged(String raw) {
+    setState(() {
+      _distanceOverrideMeters = parseDistanceOverrideMeters(
+        raw,
+        units: widget.unitSystem,
+      );
+    });
+  }
+
+  void _clearDistanceOverride() {
+    setState(() {
+      _distanceOverrideMeters = null;
+      _distanceOverrideController.clear();
+    });
+  }
 
   String get _smartDefaultFileName => buildSmartExportFileName(
         startTime: widget.initialResult.summary.startTime,
@@ -217,6 +260,40 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   @override
   Widget build(BuildContext context) {
     final diagnostics = widget.initialResult.diagnostics;
+    final effectiveActivity = _distanceOverrideMeters != null
+        ? CoreEngine.applyDistanceOverride(
+            widget.initialResult.activity,
+            _distanceOverrideMeters,
+          )
+        : widget.initialResult.activity;
+    final effectiveSummary = _distanceOverrideMeters != null
+        ? ActivitySummary(
+            trackpointCount: widget.initialResult.summary.trackpointCount,
+            startTime: widget.initialResult.summary.startTime,
+            endTime: widget.initialResult.summary.endTime,
+            duration: widget.initialResult.summary.duration,
+            gpsDistanceMeters: _distanceOverrideMeters!,
+            elevationGainMeters:
+                widget.initialResult.summary.elevationGainMeters,
+            avgHeartRateBpm: widget.initialResult.summary.avgHeartRateBpm,
+            maxHeartRateBpm: widget.initialResult.summary.maxHeartRateBpm,
+            avgPaceSecondsPerKm: _distanceOverrideMeters! > 0 &&
+                    widget.initialResult.summary.duration.inMilliseconds > 0
+                ? (widget.initialResult.summary.duration.inMilliseconds /
+                        1000.0) /
+                    (_distanceOverrideMeters! / 1000.0)
+                : widget.initialResult.summary.avgPaceSecondsPerKm,
+            calories: widget.initialResult.summary.calories,
+            deviceInfo: widget.initialResult.summary.deviceInfo,
+            lapCount: widget.initialResult.summary.lapCount,
+          )
+        : widget.initialResult.summary;
+    final distanceDiagnostics = CoreEngine.analyzeDistance(
+      widget.initialResult.activity,
+      isImperial: widget.unitSystem == UnitSystem.imperial,
+      distanceOverrideMeters: _distanceOverrideMeters,
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_currentEdit.title ?? widget.initialResult.activity.title),
@@ -250,8 +327,11 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
               index: _selectedTab,
               children: [
                 _OverviewTab(
-                  activity: widget.initialResult.activity,
-                  summary: widget.initialResult.summary,
+                  activity: effectiveActivity,
+                  summary: effectiveSummary,
+                  distanceDiagnostics: distanceDiagnostics,
+                  distanceOverrideMeters: _distanceOverrideMeters,
+                  onApplyNudge: _applyNudgeDistanceOverride,
                   sourceFileName: widget.sourceFileName,
                   currentTitle: _currentEdit.title ?? widget.initialResult.activity.title,
                   currentSportType: _sportType,
@@ -262,6 +342,11 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                 _EditTab(
                   titleController: _titleController,
                   descriptionController: _descriptionController,
+                  distanceOverrideController: _distanceOverrideController,
+                  hasDistanceOverride: _distanceOverrideMeters != null,
+                  unitSystem: widget.unitSystem,
+                  onDistanceOverrideChanged: _onDistanceOverrideChanged,
+                  onClearDistanceOverride: _clearDistanceOverride,
                   sportType: _sportType,
                   availableChannels: widget.initialResult.activity.availableChannels,
                   onSportChanged: (sport) {
@@ -272,6 +357,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                 ),
                 _ExportTab(
                   exportFormat: _exportFormat,
+                  hasDistanceOverride: _distanceOverrideMeters != null,
                   fileNameController: _fileNameController,
                   isExporting: _isExporting,
                   statusMessage: _exportStatusMessage,
@@ -374,6 +460,9 @@ class _OverviewTab extends StatelessWidget {
   const _OverviewTab({
     required this.activity,
     required this.summary,
+    required this.distanceDiagnostics,
+    required this.distanceOverrideMeters,
+    required this.onApplyNudge,
     required this.sourceFileName,
     required this.currentTitle,
     required this.currentSportType,
@@ -384,6 +473,9 @@ class _OverviewTab extends StatelessWidget {
 
   final Activity activity;
   final ActivitySummary summary;
+  final DistanceDiagnostics distanceDiagnostics;
+  final double? distanceOverrideMeters;
+  final ValueChanged<double> onApplyNudge;
   final String sourceFileName;
   final String currentTitle;
   final SportType currentSportType;
@@ -488,6 +580,13 @@ class _OverviewTab extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 12),
+        _StravaTaxCard(
+          diagnostics: distanceDiagnostics,
+          distanceOverrideMeters: distanceOverrideMeters,
+          unitSystem: unitSystem,
+          onApplyNudge: onApplyNudge,
+        ),
         if (displayGeometry != null) ...[
           const SizedBox(height: 12),
           ChannelChartsSection(
@@ -500,6 +599,134 @@ class _OverviewTab extends StatelessWidget {
           LapTableCard(
             laps: activity.laps,
             unitSystem: unitSystem,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _StravaTaxCard extends StatelessWidget {
+  const _StravaTaxCard({
+    required this.diagnostics,
+    required this.distanceOverrideMeters,
+    required this.unitSystem,
+    required this.onApplyNudge,
+  });
+
+  final DistanceDiagnostics diagnostics;
+  final double? distanceOverrideMeters;
+  final UnitSystem unitSystem;
+  final ValueChanged<double> onApplyNudge;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final unitSuffix = distanceUnitLabel(unitSystem);
+    final recordedText = diagnostics.recordedDistanceMeters != null
+        ? formatPreciseDistance(
+            diagnostics.recordedDistanceMeters!,
+            units: unitSystem,
+          )
+        : '—';
+    final gpsText = diagnostics.gpsDistanceMeters > 0
+        ? formatDistance(diagnostics.gpsDistanceMeters, units: unitSystem)
+        : '—';
+    final predictedText =
+        '${diagnostics.predictedStravaDisplayValue.toStringAsFixed(2)} $unitSuffix';
+    final taxText = diagnostics.stravaTaxMeters != null
+        ? '${diagnostics.stravaTaxMeters! >= 0 ? '+' : ''}${formatPreciseDistance(diagnostics.stravaTaxMeters!, units: unitSystem)}'
+        : '—';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Card(
+          key: const Key('strava-tax-card'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                child: Text(
+                  'Strava Tax Diagnostics',
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+              _StatRow(label: 'Recorded Distance', value: recordedText),
+              const Divider(height: 1),
+              _StatRow(label: 'GPS Distance (2D Haversine)', value: gpsText),
+              const Divider(height: 1),
+              _StatRow(label: 'Strava Tax Discrepancy', value: taxText),
+              const Divider(height: 1),
+              _StatRow(
+                label: 'Predicted Strava Display',
+                value: predictedText,
+              ),
+              if (distanceOverrideMeters != null) ...[
+                const Divider(height: 1),
+                _StatRow(
+                  label: 'Distance Override',
+                  value: formatDistance(
+                    distanceOverrideMeters!,
+                    units: unitSystem,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (diagnostics.dropsMilestone &&
+            diagnostics.nudgeTargetMeters != null &&
+            diagnostics.nudgeTargetDisplayValue != null) ...[
+          const SizedBox(height: 12),
+          Card(
+            key: const Key('strava-truncation-warning-card'),
+            color: colors.tertiaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        color: colors.onTertiaryContainer,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Strava Floor-Truncation Warning',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: colors.onTertiaryContainer,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Strava rounds down to 2 decimals ($predictedText), which drops the ${diagnostics.nudgeTargetDisplayValue!.toStringAsFixed(2)} $unitSuffix milestone.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colors.onTertiaryContainer,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton.tonalIcon(
+                    key: const Key('nudge-distance-override-button'),
+                    onPressed: () =>
+                        onApplyNudge(diagnostics.nudgeTargetMeters!),
+                    icon: const Icon(Icons.auto_fix_high),
+                    label: Text(
+                      'Nudge to ${diagnostics.nudgeTargetDisplayValue!.toStringAsFixed(2)} $unitSuffix',
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ],
@@ -532,6 +759,11 @@ class _EditTab extends StatelessWidget {
   const _EditTab({
     required this.titleController,
     required this.descriptionController,
+    required this.distanceOverrideController,
+    required this.hasDistanceOverride,
+    required this.unitSystem,
+    required this.onDistanceOverrideChanged,
+    required this.onClearDistanceOverride,
     required this.sportType,
     required this.availableChannels,
     required this.onSportChanged,
@@ -539,12 +771,18 @@ class _EditTab extends StatelessWidget {
 
   final TextEditingController titleController;
   final TextEditingController descriptionController;
+  final TextEditingController distanceOverrideController;
+  final bool hasDistanceOverride;
+  final UnitSystem unitSystem;
+  final ValueChanged<String> onDistanceOverrideChanged;
+  final VoidCallback onClearDistanceOverride;
   final SportType sportType;
   final Set<Channel> availableChannels;
   final ValueChanged<SportType?> onSportChanged;
 
   @override
   Widget build(BuildContext context) {
+    final unitSuffix = distanceUnitLabel(unitSystem);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -583,6 +821,27 @@ class _EditTab extends StatelessWidget {
           ],
           onChanged: onSportChanged,
         ),
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('edit-distance-override-field'),
+          controller: distanceOverrideController,
+          onChanged: onDistanceOverrideChanged,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: 'Distance Override ($unitSuffix)',
+            hintText: 'Leave empty to keep original distance',
+            border: const OutlineInputBorder(),
+            suffixIcon: hasDistanceOverride ||
+                    distanceOverrideController.text.isNotEmpty
+                ? IconButton(
+                    key: const Key('clear-distance-override-button'),
+                    tooltip: 'Clear Distance Override',
+                    icon: const Icon(Icons.clear),
+                    onPressed: onClearDistanceOverride,
+                  )
+                : null,
+          ),
+        ),
         const SizedBox(height: 20),
         Text(
           'Detected Channels',
@@ -605,6 +864,7 @@ class _EditTab extends StatelessWidget {
 class _ExportTab extends StatelessWidget {
   const _ExportTab({
     required this.exportFormat,
+    required this.hasDistanceOverride,
     required this.fileNameController,
     required this.isExporting,
     required this.statusMessage,
@@ -620,6 +880,7 @@ class _ExportTab extends StatelessWidget {
   });
 
   final ExportFormat exportFormat;
+  final bool hasDistanceOverride;
   final TextEditingController fileNameController;
   final bool isExporting;
   final String? statusMessage;
@@ -666,6 +927,35 @@ class _ExportTab extends StatelessWidget {
             border: const OutlineInputBorder(),
           ),
         ),
+        if (hasDistanceOverride && exportFormat == ExportFormat.gpx) ...[
+          const SizedBox(height: 16),
+          Card(
+            key: const Key('gpx-distance-override-warning'),
+            color: Theme.of(context).colorScheme.errorContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'GPX 1.1 cannot carry cumulative distance. Your Distance Override will be dropped on GPX export—choose FIT or TCX to preserve it.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onErrorContainer,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 20),
         FilledButton.icon(
           onPressed: isExporting ? null : onSave,

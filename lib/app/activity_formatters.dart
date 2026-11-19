@@ -26,6 +26,45 @@ String formatDistance(
   return '${(meters / 1000.0).toStringAsFixed(2)} km';
 }
 
+/// Formats distance in meters with 3 decimal places (`X.XXX km` or `X.XXX mi`)
+/// so fractional Strava Tax differences remain visible.
+String formatPreciseDistance(
+  double meters, {
+  UnitSystem units = UnitSystem.metric,
+}) {
+  if (units == UnitSystem.imperial) {
+    return '${(meters / _metersPerMile).toStringAsFixed(3)} mi';
+  }
+  return '${(meters / 1000.0).toStringAsFixed(3)} km';
+}
+
+/// Returns the unit suffix (`km` or `mi`) for [units].
+String distanceUnitLabel(UnitSystem units) =>
+    units == UnitSystem.imperial ? 'mi' : 'km';
+
+/// Converts [meters] into a numeric string in [units] for form inputs.
+String formatDistanceInput(
+  double meters, {
+  UnitSystem units = UnitSystem.metric,
+}) {
+  final value =
+      units == UnitSystem.imperial ? meters / _metersPerMile : meters / 1000.0;
+  return value.toStringAsFixed(2);
+}
+
+/// Parses a user-entered distance in [units] into meters, or `null` if empty
+/// or not a positive finite number.
+double? parseDistanceOverrideMeters(
+  String raw, {
+  required UnitSystem units,
+}) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) return null;
+  final parsed = double.tryParse(trimmed);
+  if (parsed == null || !parsed.isFinite || parsed <= 0) return null;
+  return units == UnitSystem.imperial ? parsed * _metersPerMile : parsed * 1000.0;
+}
+
 /// Formats elevation in meters as `X m` or `X ft`.
 String formatElevation(
   double meters, {
