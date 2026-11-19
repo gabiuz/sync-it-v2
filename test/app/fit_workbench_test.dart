@@ -232,4 +232,47 @@ void main() {
 
     expect(find.textContaining('Truncated FIT file'), findsOneWidget);
   });
+
+  testWidgets('labels Overview distance as Distance for indoor FIT without GPS', (tester) async {
+    final t0 = DateTime.utc(2026, 11, 19, 7, 0, 0);
+    final t1 = DateTime.utc(2026, 11, 19, 7, 5, 0);
+    final indoorActivity = Activity(
+      title: 'Treadmill Run',
+      description: '',
+      sportType: SportType.running,
+      trackpoints: [
+        Trackpoint(
+          timestamp: t0,
+          cumulativeDistanceMeters: 0.0,
+          heartRateBpm: 140,
+        ),
+        Trackpoint(
+          timestamp: t1,
+          cumulativeDistanceMeters: 1250.0,
+          heartRateBpm: 155,
+        ),
+      ],
+      laps: [Lap(startTime: t0, endTime: t1, distanceMeters: 1250.0)],
+      availableChannels: const {Channel.distance, Channel.heartRate},
+    );
+    final fitBytes =
+        CoreEngine.exportFit(indoorActivity, const ActivityEdit()).bytes;
+
+    final fakePort = _FakePlatformIoPort(
+      nextPickedFile: PickedSourceFile(
+        fileName: 'treadmill.fit',
+        bytes: fitBytes,
+      ),
+    );
+
+    await tester.pumpWidget(SyncItApp(platformIoPort: fakePort));
+    await tester.tap(find.byKey(const Key('import-source-button')));
+    await tester.pump();
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Distance'), findsOneWidget);
+    expect(find.text('GPS Distance'), findsNothing);
+    expect(find.text('1.25 km'), findsOneWidget);
+  });
 }

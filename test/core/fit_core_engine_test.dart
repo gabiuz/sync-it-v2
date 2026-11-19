@@ -185,6 +185,10 @@ void main() {
       expect(reparsed.summary.avgHeartRateBpm, 152);
       expect(reparsed.summary.maxHeartRateBpm, 160);
       expect(reparsed.summary.lapCount, 2);
+      expect(reparsed.activity.laps[0].avgHeartRateBpm, 148);
+      expect(reparsed.activity.laps[0].maxHeartRateBpm, 154);
+      expect(reparsed.activity.laps[1].avgHeartRateBpm, 157);
+      expect(reparsed.activity.laps[1].maxHeartRateBpm, 160);
     });
 
     test('converts GPX Source File to valid FIT Export File with matching totals and terminal distance', () async {

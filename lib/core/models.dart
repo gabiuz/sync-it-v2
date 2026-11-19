@@ -116,11 +116,15 @@ class Lap {
     required this.startTime,
     required this.endTime,
     this.distanceMeters,
+    this.avgHeartRateBpm,
+    this.maxHeartRateBpm,
   });
 
   final DateTime startTime;
   final DateTime endTime;
   final double? distanceMeters;
+  final int? avgHeartRateBpm;
+  final int? maxHeartRateBpm;
 }
 
 /// Format-independent representation of a single workout.

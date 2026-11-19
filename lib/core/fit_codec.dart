@@ -696,12 +696,16 @@ class FitCodec {
           }
         }
 
+        final avgHr = values[15] as int?;
+        final maxHr = values[16] as int?;
         if (startTime != null && endTime != null) {
           onLap(
             Lap(
               startTime: startTime,
               endTime: endTime,
               distanceMeters: distRaw != null ? distRaw / 100.0 : null,
+              avgHeartRateBpm: avgHr != null && avgHr > 0 ? avgHr : null,
+              maxHeartRateBpm: maxHr != null && maxHr > 0 ? maxHr : null,
             ),
             unknownFields,
           );
@@ -1040,6 +1044,8 @@ class FitCodec {
               .round()
           : (laps.length == 1 ? updatedActivity.calories : null);
 
+      final lapHr = _computeLapHeartRate(points, lap);
+
       _writeDataHeader(dataBuilder, localType: 5);
       _writeUint32(dataBuilder, _dateTimeToFitTime(lap.endTime));
       _writeUint32(dataBuilder, _dateTimeToFitTime(lap.startTime));
@@ -1047,8 +1053,8 @@ class FitCodec {
       _writeUint32(dataBuilder, lapElapsedMs);
       _writeUint32(dataBuilder, (lapDistance * 100.0).round());
       _writeUint16(dataBuilder, lapCalories ?? 0xFFFF);
-      dataBuilder.addByte(summary.avgHeartRateBpm ?? 0xFF);
-      dataBuilder.addByte(summary.maxHeartRateBpm ?? 0xFF);
+      dataBuilder.addByte(lapHr.$1 ?? lap.avgHeartRateBpm ?? 0xFF);
+      dataBuilder.addByte(lapHr.$2 ?? lap.maxHeartRateBpm ?? 0xFF);
       dataBuilder.addByte(fitSport);
     }
 
@@ -1201,6 +1207,26 @@ class FitCodec {
     final d1 = first.cumulativeDistanceMeters ?? 0.0;
     final d2 = last.cumulativeDistanceMeters ?? d1;
     return math.max(0.0, d2 - d1);
+  }
+
+  static (int?, int?) _computeLapHeartRate(List<Trackpoint> points, Lap lap) {
+    var sum = 0;
+    var count = 0;
+    var maxHr = 0;
+    for (final pt in points) {
+      if (pt.timestamp.isBefore(lap.startTime) ||
+          pt.timestamp.isAfter(lap.endTime)) {
+        continue;
+      }
+      final hr = pt.heartRateBpm;
+      if (hr != null && hr > 0) {
+        sum += hr;
+        count++;
+        if (hr > maxHr) maxHr = hr;
+      }
+    }
+    if (count == 0) return (null, null);
+    return ((sum / count).round(), maxHr);
   }
 
   static Trackpoint _mergeDuplicateTrackpoints(

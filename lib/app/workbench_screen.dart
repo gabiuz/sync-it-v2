@@ -299,7 +299,7 @@ class _OverviewTab extends StatelessWidget {
         Card(
           child: Column(
             children: [
-              _StatRow(label: 'GPS Distance', value: '$distanceKm km'),
+              _StatRow(label: 'Distance', value: '$distanceKm km'),
               const Divider(height: 1),
               _StatRow(label: 'Duration', value: durationText),
               const Divider(height: 1),
