@@ -5,6 +5,7 @@ import 'display_geometry.dart';
 import 'fit_codec.dart';
 import 'gpx_codec.dart';
 import 'models.dart';
+import 'summary_calculator.dart';
 import 'tcx_codec.dart';
 
 export 'models.dart';
@@ -110,6 +111,31 @@ class CoreEngine {
   }) {
     return Isolate.run(
       () => buildDisplayGeometry(activity, maxPoints: maxPoints),
+    );
+  }
+
+  /// Computes Strava Tax and floor-truncation diagnostics for [activity].
+  static DistanceDiagnostics analyzeDistance(
+    Activity activity, {
+    required bool isImperial,
+    double? distanceOverrideMeters,
+  }) {
+    return SummaryCalculator.analyzeDistance(
+      activity,
+      isImperial: isImperial,
+      distanceOverrideMeters: distanceOverrideMeters,
+    );
+  }
+
+  /// Proportionally scales cumulative distance across [activity]'s
+  /// trackpoints and recomputes all [Lap] distances without mutating [activity].
+  static Activity applyDistanceOverride(
+    Activity activity,
+    double? targetDistanceMeters,
+  ) {
+    return SummaryCalculator.applyDistanceOverride(
+      activity,
+      targetDistanceMeters,
     );
   }
 }

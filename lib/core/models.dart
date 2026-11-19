@@ -219,17 +219,44 @@ class ActivitySummary {
   final int lapCount;
 }
 
+/// Strava Tax and floor-truncation diagnostics for an [Activity].
+class DistanceDiagnostics {
+  const DistanceDiagnostics({
+    required this.gpsDistanceMeters,
+    required this.recordedDistanceMeters,
+    required this.effectiveDistanceMeters,
+    required this.stravaTaxMeters,
+    required this.predictedStravaDisplayValue,
+    required this.isImperial,
+    required this.dropsMilestone,
+    this.nudgeTargetMeters,
+    this.nudgeTargetDisplayValue,
+  });
+
+  final double gpsDistanceMeters;
+  final double? recordedDistanceMeters;
+  final double effectiveDistanceMeters;
+  final double? stravaTaxMeters;
+  final double predictedStravaDisplayValue;
+  final bool isImperial;
+  final bool dropsMilestone;
+  final double? nudgeTargetMeters;
+  final double? nudgeTargetDisplayValue;
+}
+
 /// User edits applied when producing an Export File.
 class ActivityEdit {
   const ActivityEdit({
     this.title,
     this.description,
     this.sportType,
+    this.distanceOverrideMeters,
   });
 
   final String? title;
   final String? description;
   final SportType? sportType;
+  final double? distanceOverrideMeters;
 }
 
 /// Result returned by parsing a Source File.
