@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/core_engine.dart';
 import '../port/platform_io_port.dart';
+import 'activity_formatters.dart';
 import 'channel_charts_section.dart';
 import 'lap_table_card.dart';
 import 'route_map_card.dart';
@@ -299,9 +300,9 @@ class _OverviewTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final distanceKm = (summary.gpsDistanceMeters / 1000.0).toStringAsFixed(2);
-    final durationText = _formatDuration(summary.duration);
+    final durationText = formatDuration(summary.duration);
     final paceText = summary.avgPaceSecondsPerKm != null
-        ? _formatPace(summary.avgPaceSecondsPerKm!)
+        ? formatPace(summary.avgPaceSecondsPerKm!)
         : '—';
     final avgHrText =
         summary.avgHeartRateBpm != null ? '${summary.avgHeartRateBpm} bpm' : '—';
@@ -400,20 +401,6 @@ class _OverviewTab extends StatelessWidget {
         ],
       ],
     );
-  }
-
-  static String _formatDuration(Duration d) {
-    final hours = d.inHours;
-    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
-  }
-
-  static String _formatPace(double secondsPerKm) {
-    final totalSeconds = secondsPerKm.round();
-    final mins = totalSeconds ~/ 60;
-    final secs = (totalSeconds % 60).toString().padLeft(2, '0');
-    return '$mins:$secs /km';
   }
 }
 

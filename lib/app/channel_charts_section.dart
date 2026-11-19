@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../core/core_engine.dart';
+import 'activity_formatters.dart';
 
 /// Displays interactive Channel charts for Heart Rate, Elevation, and Pace,
 /// and cleanly marks unavailable Channels.
@@ -47,17 +48,10 @@ class ChannelChartsSection extends StatelessWidget {
           accentColor: Colors.indigo,
           samples: geometry.paceSeries,
           invertY: true,
-          formatValue: _formatPace,
+          formatValue: formatPace,
         ),
       ],
     );
-  }
-
-  static String _formatPace(double secondsPerKm) {
-    final totalSeconds = secondsPerKm.round();
-    final mins = totalSeconds ~/ 60;
-    final secs = (totalSeconds % 60).toString().padLeft(2, '0');
-    return '$mins:$secs /km';
   }
 }
 

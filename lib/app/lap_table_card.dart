@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/core_engine.dart';
+import 'activity_formatters.dart';
 
 /// Structured Lap breakdown table showing per-Lap distance, duration, pace,
 /// and average heart rate.
@@ -95,9 +96,9 @@ class LapTableCard extends StatelessWidget {
     final dist = lap.distanceMeters;
     final distText =
         dist != null ? '${(dist / 1000.0).toStringAsFixed(2)} km' : '—';
-    final durText = _formatDuration(lap.duration);
+    final durText = formatDuration(lap.duration);
     final paceText = (dist != null && dist > 0 && lap.duration.inSeconds > 0)
-        ? _formatPace(lap.duration.inMilliseconds / 1000.0 / (dist / 1000.0))
+        ? formatPace(lap.duration.inMilliseconds / 1000.0 / (dist / 1000.0))
         : '—';
     final hrText =
         lap.avgHeartRateBpm != null ? '${lap.avgHeartRateBpm} bpm' : '—';
@@ -137,19 +138,5 @@ class LapTableCard extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  static String _formatDuration(Duration d) {
-    final hours = d.inHours;
-    final minutes = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final seconds = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return hours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
-  }
-
-  static String _formatPace(double secondsPerKm) {
-    final totalSeconds = secondsPerKm.round();
-    final mins = totalSeconds ~/ 60;
-    final secs = (totalSeconds % 60).toString().padLeft(2, '0');
-    return '$mins:$secs /km';
   }
 }
