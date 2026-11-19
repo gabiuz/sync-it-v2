@@ -1,6 +1,7 @@
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'display_geometry.dart';
 import 'fit_codec.dart';
 import 'gpx_codec.dart';
 import 'models.dart';
@@ -91,5 +92,24 @@ class CoreEngine {
     ActivityEdit edit,
   ) {
     return Isolate.run(() => exportTcx(activity, edit));
+  }
+
+  /// Builds downsampled display geometry for map and Channel charts without
+  /// mutating canonical [Activity.trackpoints].
+  static ActivityDisplayGeometry buildDisplayGeometry(
+    Activity activity, {
+    int maxPoints = DisplayGeometryBuilder.defaultMaxPoints,
+  }) {
+    return DisplayGeometryBuilder.build(activity, maxPoints: maxPoints);
+  }
+
+  /// Runs [buildDisplayGeometry] in a background Dart isolate.
+  static Future<ActivityDisplayGeometry> buildDisplayGeometryInIsolate(
+    Activity activity, {
+    int maxPoints = DisplayGeometryBuilder.defaultMaxPoints,
+  }) {
+    return Isolate.run(
+      () => buildDisplayGeometry(activity, maxPoints: maxPoints),
+    );
   }
 }

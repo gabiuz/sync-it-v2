@@ -37,6 +37,9 @@ class _FakePlatformIoPort implements PlatformIoPort {
     lastSharedFileName = fileName;
     lastSharedBytes = bytes;
   }
+
+  @override
+  Future<bool> isMapTilesAvailable() async => false;
 }
 
 Uint8List _buildFitWithVendorExtension() {

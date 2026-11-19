@@ -57,6 +57,17 @@ class DevicePlatformIoPort implements PlatformIoPort {
     );
   }
 
+  @override
+  Future<bool> isMapTilesAvailable() async {
+    try {
+      final result = await InternetAddress.lookup('tile.openstreetmap.org')
+          .timeout(const Duration(seconds: 2));
+      return result.isNotEmpty && result.first.rawAddress.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static String _mimeTypeForFileName(String fileName) {
     final lower = fileName.toLowerCase();
     if (lower.endsWith('.fit')) {

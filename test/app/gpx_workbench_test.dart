@@ -37,6 +37,9 @@ class FakePlatformIoPort implements PlatformIoPort {
     lastSharedFileName = fileName;
     lastSharedBytes = bytes;
   }
+
+  @override
+  Future<bool> isMapTilesAvailable() async => false;
 }
 
 Uint8List _utf8(String s) => Uint8List.fromList(utf8.encode(s));

@@ -24,4 +24,7 @@ abstract interface class PlatformIoPort {
     required String fileName,
     required Uint8List bytes,
   });
+
+  /// Returns whether online OpenStreetMap tiles are reachable.
+  Future<bool> isMapTilesAvailable();
 }
