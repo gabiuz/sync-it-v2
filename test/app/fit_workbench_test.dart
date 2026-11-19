@@ -124,6 +124,19 @@ Uint8List _wrapFit(Uint8List dataBytes) {
   return out;
 }
 
+Future<void> _pumpUntilSettledAsync(WidgetTester tester) async {
+  for (var i = 0; i < 50; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump();
+    if (find.byType(CircularProgressIndicator).evaluate().isEmpty) {
+      break;
+    }
+  }
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('imports FIT with vendor-extension notice, defaults Export to .fit, and switches to .gpx in one tap', (tester) async {
     final fakePort = _FakePlatformIoPort(
@@ -137,8 +150,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('import-source-button')));
     await tester.pump();
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-    await tester.pumpAndSettle();
+    await _pumpUntilSettledAsync(tester);
 
     // Overview: totals, device info, calories, and vendor-extension notice
     expect(find.textContaining('proprietary vendor or developer'), findsOneWidget);
@@ -153,8 +165,7 @@ void main() {
 
     await tester.tap(find.text('Save FIT'));
     await tester.pump();
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-    await tester.pumpAndSettle();
+    await _pumpUntilSettledAsync(tester);
 
     expect(fakePort.lastSavedFileName, 'tempo_run.fit');
     expect(fakePort.lastSavedBytes, isNotNull);
@@ -168,8 +179,7 @@ void main() {
 
     await tester.tap(find.text('Save GPX'));
     await tester.pump();
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-    await tester.pumpAndSettle();
+    await _pumpUntilSettledAsync(tester);
 
     expect(fakePort.lastSavedFileName, 'tempo_run.gpx');
     final reparsedGpx = CoreEngine.parseGpx(fakePort.lastSavedBytes!);
@@ -199,8 +209,7 @@ void main() {
     await tester.pumpWidget(SyncItApp(platformIoPort: fakePort));
     await tester.tap(find.byKey(const Key('import-source-button')));
     await tester.pump();
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-    await tester.pumpAndSettle();
+    await _pumpUntilSettledAsync(tester);
 
     await tester.tap(find.text('Export'));
     await tester.pumpAndSettle();
@@ -208,8 +217,7 @@ void main() {
 
     await tester.tap(find.text('Save FIT'));
     await tester.pump();
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-    await tester.pumpAndSettle();
+    await _pumpUntilSettledAsync(tester);
 
     expect(fakePort.lastSavedFileName, 'morning_walk.fit');
     final reparsedFit = CoreEngine.parseFit(fakePort.lastSavedBytes!);
@@ -227,8 +235,7 @@ void main() {
     await tester.pumpWidget(SyncItApp(platformIoPort: fakePort));
     await tester.tap(find.byKey(const Key('import-source-button')));
     await tester.pump();
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-    await tester.pumpAndSettle();
+    await _pumpUntilSettledAsync(tester);
 
     expect(find.textContaining('Truncated FIT file'), findsOneWidget);
   });
@@ -268,8 +275,7 @@ void main() {
     await tester.pumpWidget(SyncItApp(platformIoPort: fakePort));
     await tester.tap(find.byKey(const Key('import-source-button')));
     await tester.pump();
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-    await tester.pumpAndSettle();
+    await _pumpUntilSettledAsync(tester);
 
     expect(find.text('Distance'), findsOneWidget);
     expect(find.text('GPS Distance'), findsNothing);
