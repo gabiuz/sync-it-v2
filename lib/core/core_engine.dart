@@ -1,0 +1,39 @@
+import 'dart:isolate';
+import 'dart:typed_data';
+
+import 'gpx_codec.dart';
+import 'models.dart';
+
+export 'models.dart';
+
+/// Pure-Dart Core Engine Seam (zero Flutter imports).
+class CoreEngine {
+  const CoreEngine._();
+
+  /// Parses GPX [bytes] into a canonical [Activity], [ActivitySummary], and
+  /// defensive-parsing [Diagnostic]s.
+  static ParseResult parseGpx(Uint8List bytes, {String? fileName}) {
+    return GpxCodec.parse(bytes, fileName: fileName);
+  }
+
+  /// Applies [edit] to [activity] and serializes a clean GPX Export File.
+  static ExportResult exportGpx(Activity activity, ActivityEdit edit) {
+    return GpxCodec.export(activity, edit);
+  }
+
+  /// Runs [parseGpx] in a background Dart isolate.
+  static Future<ParseResult> parseGpxInIsolate(
+    Uint8List bytes, {
+    String? fileName,
+  }) {
+    return Isolate.run(() => parseGpx(bytes, fileName: fileName));
+  }
+
+  /// Runs [exportGpx] in a background Dart isolate.
+  static Future<ExportResult> exportGpxInIsolate(
+    Activity activity,
+    ActivityEdit edit,
+  ) {
+    return Isolate.run(() => exportGpx(activity, edit));
+  }
+}

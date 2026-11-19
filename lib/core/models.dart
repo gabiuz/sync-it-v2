@@ -1,0 +1,223 @@
+import 'dart:typed_data';
+
+/// Telemetry series available on an [Activity] or [Trackpoint].
+enum Channel {
+  gps,
+  elevation,
+  distance,
+  heartRate,
+  cadence,
+  power,
+}
+
+/// Canonical sport classification mapped across GPX/TCX/FIT.
+enum SportType {
+  running('running', 'Running'),
+  cycling('cycling', 'Cycling'),
+  walking('walking', 'Walking'),
+  hiking('hiking', 'Hiking'),
+  swimming('swimming', 'Swimming'),
+  other('other', 'Other');
+
+  const SportType(this.gpxName, this.displayName);
+
+  final String gpxName;
+  final String displayName;
+
+  static SportType fromGpxType(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return SportType.other;
+    final normalized = raw.trim().toLowerCase();
+    for (final sport in SportType.values) {
+      if (sport.gpxName == normalized ||
+          sport.displayName.toLowerCase() == normalized) {
+        return sport;
+      }
+    }
+    if (normalized.contains('run')) return SportType.running;
+    if (normalized.contains('cycl') || normalized.contains('bik')) {
+      return SportType.cycling;
+    }
+    if (normalized.contains('walk')) return SportType.walking;
+    if (normalized.contains('hik')) return SportType.hiking;
+    if (normalized.contains('swim')) return SportType.swimming;
+    return SportType.other;
+  }
+}
+
+/// Severity of a defensive-parsing or export [Diagnostic].
+enum DiagnosticSeverity {
+  info,
+  warning,
+}
+
+/// Machine-identifiable diagnostic code for UI banners and tests.
+enum DiagnosticCode {
+  duplicateTimestampsNormalized,
+  outOfOrderTrackpointsSorted,
+  zeroHeartRateDropped,
+  unsupportedExtensionsDropped,
+}
+
+/// Non-fatal notice surfaced to the user after parsing or exporting.
+class Diagnostic {
+  const Diagnostic({
+    required this.code,
+    required this.severity,
+    required this.message,
+    this.count = 1,
+  });
+
+  final DiagnosticCode code;
+  final DiagnosticSeverity severity;
+  final String message;
+  final int count;
+}
+
+/// A single timestamped sample along an [Activity]'s timeline.
+class Trackpoint {
+  const Trackpoint({
+    required this.timestamp,
+    this.latitude,
+    this.longitude,
+    this.elevationMeters,
+    this.cumulativeDistanceMeters,
+    this.heartRateBpm,
+    this.cadenceRpm,
+    this.powerWatts,
+  });
+
+  final DateTime timestamp;
+  final double? latitude;
+  final double? longitude;
+  final double? elevationMeters;
+  final double? cumulativeDistanceMeters;
+  final int? heartRateBpm;
+  final int? cadenceRpm;
+  final int? powerWatts;
+}
+
+/// A contiguous time-bounded interval within an [Activity].
+class Lap {
+  const Lap({
+    required this.startTime,
+    required this.endTime,
+    this.distanceMeters,
+  });
+
+  final DateTime startTime;
+  final DateTime endTime;
+  final double? distanceMeters;
+}
+
+/// Format-independent representation of a single workout.
+class Activity {
+  const Activity({
+    required this.title,
+    required this.description,
+    required this.sportType,
+    required this.trackpoints,
+    required this.laps,
+    required this.availableChannels,
+  });
+
+  final String title;
+  final String description;
+  final SportType sportType;
+  final List<Trackpoint> trackpoints;
+  final List<Lap> laps;
+  final Set<Channel> availableChannels;
+
+  Activity copyWith({
+    String? title,
+    String? description,
+    SportType? sportType,
+    List<Trackpoint>? trackpoints,
+    List<Lap>? laps,
+    Set<Channel>? availableChannels,
+  }) {
+    return Activity(
+      title: title ?? this.title,
+      description: description ?? this.description,
+      sportType: sportType ?? this.sportType,
+      trackpoints: trackpoints ?? this.trackpoints,
+      laps: laps ?? this.laps,
+      availableChannels: availableChannels ?? this.availableChannels,
+    );
+  }
+}
+
+/// Computed summary statistics for an [Activity].
+class ActivitySummary {
+  const ActivitySummary({
+    required this.trackpointCount,
+    required this.startTime,
+    required this.endTime,
+    required this.duration,
+    required this.gpsDistanceMeters,
+    required this.elevationGainMeters,
+    this.avgHeartRateBpm,
+    this.maxHeartRateBpm,
+    this.avgPaceSecondsPerKm,
+  });
+
+  final int trackpointCount;
+  final DateTime startTime;
+  final DateTime endTime;
+  final Duration duration;
+  final double gpsDistanceMeters;
+  final double elevationGainMeters;
+  final int? avgHeartRateBpm;
+  final int? maxHeartRateBpm;
+  final double? avgPaceSecondsPerKm;
+}
+
+/// User edits applied when producing an Export File.
+class ActivityEdit {
+  const ActivityEdit({
+    this.title,
+    this.description,
+    this.sportType,
+  });
+
+  final String? title;
+  final String? description;
+  final SportType? sportType;
+}
+
+/// Result returned by parsing a Source File.
+class ParseResult {
+  const ParseResult({
+    required this.activity,
+    required this.summary,
+    required this.diagnostics,
+  });
+
+  final Activity activity;
+  final ActivitySummary summary;
+  final List<Diagnostic> diagnostics;
+}
+
+/// Result returned by serializing an Export File.
+class ExportResult {
+  const ExportResult({
+    required this.bytes,
+    required this.activity,
+    required this.summary,
+    required this.diagnostics,
+  });
+
+  final Uint8List bytes;
+  final Activity activity;
+  final ActivitySummary summary;
+  final List<Diagnostic> diagnostics;
+}
+
+/// Actionable error thrown when a Source File cannot be parsed.
+class ActivityParseException implements Exception {
+  const ActivityParseException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
