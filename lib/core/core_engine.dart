@@ -138,4 +138,14 @@ class CoreEngine {
       targetDistanceMeters,
     );
   }
+
+  /// Evaluates format-specific lossy-export and blocking warnings for
+  /// [activity] with [edit] applied under [format].
+  static List<ExportWarning> analyzeExportWarnings(
+    Activity activity,
+    ActivityEdit edit,
+    ExportFormat format,
+  ) {
+    return SummaryCalculator.analyzeExportWarnings(activity, edit, format);
+  }
 }

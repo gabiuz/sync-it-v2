@@ -311,4 +311,309 @@ class SummaryCalculator {
       },
     );
   }
+
+  /// Applies metadata edits, Distance Override, and Channel stripping to
+  /// [activity] without mutating the input.
+  static Activity applyEdits(Activity activity, ActivityEdit edit) {
+    final baseActivity = edit.distanceOverrideMeters != null
+        ? applyDistanceOverride(activity, edit.distanceOverrideMeters)
+        : activity;
+
+    final stripped = edit.strippedChannels;
+    final stripGps = stripped.contains(StrippableChannel.gps);
+    final stripEle = stripped.contains(StrippableChannel.elevation);
+    final stripHr = stripped.contains(StrippableChannel.heartRate);
+    final stripCad = stripped.contains(StrippableChannel.cadence);
+    final stripPower = stripped.contains(StrippableChannel.power);
+    final stripTemp = stripped.contains(StrippableChannel.temperature);
+    final stripCalories = stripped.contains(StrippableChannel.calories);
+    final stripLaps = stripped.contains(StrippableChannel.laps);
+    final stripDeviceInfo = stripped.contains(StrippableChannel.deviceInfo);
+
+    var points = baseActivity.trackpoints;
+    if (stripGps && points.isNotEmpty) {
+      points = _ensureCumulativeDistancesBeforeGpsStrip(points);
+    }
+
+    final strippedPoints = <Trackpoint>[];
+    final channels = <Channel>{};
+    for (final pt in points) {
+      final lat = stripGps ? null : pt.latitude;
+      final lon = stripGps ? null : pt.longitude;
+      final ele = stripEle ? null : pt.elevationMeters;
+      final dist = pt.cumulativeDistanceMeters;
+      final hr = stripHr ? null : pt.heartRateBpm;
+      final cad = stripCad ? null : pt.cadenceRpm;
+      final pwr = stripPower ? null : pt.powerWatts;
+      final temp = stripTemp ? null : pt.temperatureCelsius;
+
+      if (lat != null && lon != null) channels.add(Channel.gps);
+      if (ele != null) channels.add(Channel.elevation);
+      if (dist != null) channels.add(Channel.distance);
+      if (hr != null) channels.add(Channel.heartRate);
+      if (cad != null) channels.add(Channel.cadence);
+      if (pwr != null) channels.add(Channel.power);
+      if (temp != null) channels.add(Channel.temperature);
+
+      strippedPoints.add(
+        Trackpoint(
+          timestamp: pt.timestamp,
+          latitude: lat,
+          longitude: lon,
+          elevationMeters: ele,
+          cumulativeDistanceMeters: dist,
+          heartRateBpm: hr,
+          cadenceRpm: cad,
+          powerWatts: pwr,
+          temperatureCelsius: temp,
+        ),
+      );
+    }
+
+    final effectiveCalories = stripCalories ? null : baseActivity.calories;
+    final effectiveDeviceInfo =
+        stripDeviceInfo ? null : baseActivity.deviceInfo;
+
+    final List<Lap> effectiveLaps;
+    if (stripLaps && strippedPoints.isNotEmpty) {
+      effectiveLaps = [
+        _buildCollapsedLap(
+          strippedPoints,
+          calories: effectiveCalories,
+          stripHr: stripHr,
+          stripCad: stripCad,
+        ),
+      ];
+    } else {
+      effectiveLaps = baseActivity.laps
+          .map(
+            (lap) => Lap(
+              startTime: lap.startTime,
+              endTime: lap.endTime,
+              distanceMeters: lap.distanceMeters,
+              avgHeartRateBpm: stripHr ? null : lap.avgHeartRateBpm,
+              maxHeartRateBpm: stripHr ? null : lap.maxHeartRateBpm,
+              avgCadenceRpm: stripCad ? null : lap.avgCadenceRpm,
+              maxCadenceRpm: stripCad ? null : lap.maxCadenceRpm,
+              calories: stripCalories ? null : lap.calories,
+            ),
+          )
+          .toList();
+    }
+
+    return Activity(
+      title: edit.title ?? baseActivity.title,
+      description: edit.description ?? baseActivity.description,
+      sportType: edit.sportType ?? baseActivity.sportType,
+      trackpoints: strippedPoints,
+      laps: effectiveLaps,
+      availableChannels: channels,
+      calories: effectiveCalories,
+      deviceInfo: effectiveDeviceInfo,
+    );
+  }
+
+  static List<Trackpoint> _ensureCumulativeDistancesBeforeGpsStrip(
+    List<Trackpoint> points,
+  ) {
+    if (points.every((p) => p.cumulativeDistanceMeters != null)) {
+      return points;
+    }
+    final result = <Trackpoint>[];
+    var cumulative = 0.0;
+    Trackpoint? prevGps;
+    for (final pt in points) {
+      if (pt.latitude != null && pt.longitude != null) {
+        if (prevGps != null) {
+          cumulative += haversineMeters(
+            prevGps.latitude!,
+            prevGps.longitude!,
+            pt.latitude!,
+            pt.longitude!,
+          );
+        }
+        prevGps = pt;
+      }
+      final dist = pt.cumulativeDistanceMeters ?? cumulative;
+      result.add(
+        Trackpoint(
+          timestamp: pt.timestamp,
+          latitude: pt.latitude,
+          longitude: pt.longitude,
+          elevationMeters: pt.elevationMeters,
+          cumulativeDistanceMeters: dist,
+          heartRateBpm: pt.heartRateBpm,
+          cadenceRpm: pt.cadenceRpm,
+          powerWatts: pt.powerWatts,
+          temperatureCelsius: pt.temperatureCelsius,
+        ),
+      );
+    }
+    return result;
+  }
+
+  static Lap _buildCollapsedLap(
+    List<Trackpoint> points, {
+    required int? calories,
+    required bool stripHr,
+    required bool stripCad,
+  }) {
+    var hrSum = 0;
+    var hrCount = 0;
+    var hrMax = 0;
+    var cadSum = 0;
+    var cadCount = 0;
+    var cadMax = 0;
+
+    for (final pt in points) {
+      if (!stripHr && pt.heartRateBpm != null && pt.heartRateBpm! > 0) {
+        hrSum += pt.heartRateBpm!;
+        hrCount++;
+        if (pt.heartRateBpm! > hrMax) hrMax = pt.heartRateBpm!;
+      }
+      if (!stripCad && pt.cadenceRpm != null && pt.cadenceRpm! > 0) {
+        cadSum += pt.cadenceRpm!;
+        cadCount++;
+        if (pt.cadenceRpm! > cadMax) cadMax = pt.cadenceRpm!;
+      }
+    }
+
+    double? distanceMeters;
+    final firstDist = points.first.cumulativeDistanceMeters;
+    final lastDist = points.last.cumulativeDistanceMeters;
+    if (lastDist != null) {
+      distanceMeters = math.max(0.0, lastDist - (firstDist ?? 0.0));
+    }
+
+    return Lap(
+      startTime: points.first.timestamp,
+      endTime: points.last.timestamp,
+      distanceMeters: distanceMeters,
+      avgHeartRateBpm: hrCount > 0 ? (hrSum / hrCount).round() : null,
+      maxHeartRateBpm: hrCount > 0 ? hrMax : null,
+      avgCadenceRpm: cadCount > 0 ? (cadSum / cadCount).round() : null,
+      maxCadenceRpm: cadCount > 0 ? cadMax : null,
+      calories: calories,
+    );
+  }
+
+  /// Evaluates format-specific lossy-export and blocking warnings for
+  /// [activity] with [edit] applied under [format].
+  static List<ExportWarning> analyzeExportWarnings(
+    Activity activity,
+    ActivityEdit edit,
+    ExportFormat format,
+  ) {
+    final warnings = <ExportWarning>[];
+    final stripped = edit.strippedChannels;
+    final effectiveTitle = (edit.title ?? activity.title).trim();
+    final effectiveDesc = (edit.description ?? activity.description).trim();
+    final effectiveSport = edit.sportType ?? activity.sportType;
+
+    final hasGps =
+        activity.availableChannels.contains(Channel.gps) &&
+        !stripped.contains(StrippableChannel.gps);
+    final hasDistance =
+        edit.distanceOverrideMeters != null ||
+        activity.availableChannels.contains(Channel.distance);
+    final hasLaps =
+        activity.laps.length > 1 && !stripped.contains(StrippableChannel.laps);
+    final hasCalories =
+        activity.calories != null &&
+        !stripped.contains(StrippableChannel.calories);
+    final hasPower =
+        activity.availableChannels.contains(Channel.power) &&
+        !stripped.contains(StrippableChannel.power);
+    final hasTemperature =
+        activity.availableChannels.contains(Channel.temperature) &&
+        !stripped.contains(StrippableChannel.temperature);
+
+    switch (format) {
+      case ExportFormat.fit:
+        if (effectiveTitle.isNotEmpty || effectiveDesc.isNotEmpty) {
+          warnings.add(
+            const ExportWarning(
+              code: ExportWarningCode.stravaIgnoresManualUploadTitle,
+              message:
+                  'Strava ignores activity titles and descriptions in FIT files on manual web upload. Use the Strava Upload Helper below to copy & paste them.',
+            ),
+          );
+        }
+        break;
+
+      case ExportFormat.tcx:
+        if (effectiveTitle.isNotEmpty || effectiveDesc.isNotEmpty) {
+          warnings.add(
+            const ExportWarning(
+              code: ExportWarningCode.stravaIgnoresManualUploadTitle,
+              message:
+                  'Strava ignores activity titles and descriptions in TCX files on manual web upload. Use the Strava Upload Helper below to copy & paste them.',
+            ),
+          );
+        }
+        if (effectiveSport != SportType.running &&
+            effectiveSport != SportType.cycling) {
+          warnings.add(
+            ExportWarning(
+              code: ExportWarningCode.tcxNarrowsSportCategory,
+              message:
+                  'TCX 2.0 narrows sport categories to Running, Biking, or Other—"${effectiveSport.displayName}" may be imported as Other.',
+            ),
+          );
+        }
+        if (hasTemperature) {
+          warnings.add(
+            const ExportWarning(
+              code: ExportWarningCode.tcxDropsTemperature,
+              message:
+                  'TCX 2.0 does not support Temperature; temperature data will be dropped unless you export as FIT.',
+            ),
+          );
+        }
+        break;
+
+      case ExportFormat.gpx:
+        if (!hasGps) {
+          warnings.add(
+            const ExportWarning(
+              code: ExportWarningCode.gpxRequiresGps,
+              message:
+                  'GPX 1.1 requires GPS coordinates on every trackpoint. Choose FIT or TCX for a mapless Export File, or re-enable GPS Position.',
+              isBlocking: true,
+            ),
+          );
+        }
+        if (hasDistance) {
+          warnings.add(
+            ExportWarning(
+              code: ExportWarningCode.gpxDropsCumulativeDistance,
+              message: edit.distanceOverrideMeters != null
+                  ? 'GPX 1.1 cannot carry cumulative distance. Your Distance Override will be dropped on GPX export—choose FIT or TCX to preserve it.'
+                  : 'GPX 1.1 drops cumulative distance; target platforms recalculate distance from raw GPS points (Strava Tax).',
+            ),
+          );
+        }
+        if (hasLaps || hasCalories) {
+          warnings.add(
+            const ExportWarning(
+              code: ExportWarningCode.gpxDropsLapsAndCalories,
+              message:
+                  'GPX 1.1 does not carry structured Laps or Calories; choose FIT or TCX to preserve them.',
+            ),
+          );
+        }
+        if (hasPower || hasTemperature) {
+          warnings.add(
+            const ExportWarning(
+              code: ExportWarningCode.gpxDropsPowerAndTemperature,
+              message:
+                  'GPX 1.1 drops Power and Temperature channels; choose FIT to preserve all sensor channels.',
+            ),
+          );
+        }
+        break;
+    }
+
+    return warnings;
+  }
 }

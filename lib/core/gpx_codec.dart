@@ -260,11 +260,17 @@ class GpxCodec {
   }
 
   static ExportResult export(Activity activity, ActivityEdit edit) {
-    final updated = activity.copyWith(
-      title: edit.title ?? activity.title,
-      description: edit.description ?? activity.description,
-      sportType: edit.sportType ?? activity.sportType,
-    );
+    if (edit.strippedChannels.contains(StrippableChannel.gps)) {
+      throw StateError(
+        'GPX 1.1 export requires GPS Position. Choose FIT or TCX for a mapless Export File.',
+      );
+    }
+    final updated = SummaryCalculator.applyEdits(activity, edit);
+    if (!updated.availableChannels.contains(Channel.gps)) {
+      throw StateError(
+        'GPX 1.1 export requires GPS coordinates. Choose FIT or TCX for a mapless Export File.',
+      );
+    }
 
     final builder = XmlBuilder();
     builder.processing('xml', 'version="1.0" encoding="UTF-8"');
