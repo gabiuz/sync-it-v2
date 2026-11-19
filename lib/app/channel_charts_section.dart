@@ -11,9 +11,11 @@ class ChannelChartsSection extends StatelessWidget {
   const ChannelChartsSection({
     super.key,
     required this.geometry,
+    this.unitSystem = UnitSystem.metric,
   });
 
   final ActivityDisplayGeometry geometry;
+  final UnitSystem unitSystem;
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +29,7 @@ class ChannelChartsSection extends StatelessWidget {
           icon: Icons.favorite_outline,
           accentColor: Colors.redAccent,
           samples: geometry.heartRateSeries,
+          unitSystem: unitSystem,
           formatValue: (v) => '${v.round()} bpm',
         ),
         const SizedBox(height: 12),
@@ -37,7 +40,8 @@ class ChannelChartsSection extends StatelessWidget {
           icon: Icons.terrain_outlined,
           accentColor: Colors.teal,
           samples: geometry.elevationSeries,
-          formatValue: (v) => '${v.toStringAsFixed(0)} m',
+          unitSystem: unitSystem,
+          formatValue: (v) => formatElevation(v, units: unitSystem),
         ),
         const SizedBox(height: 12),
         _ChannelChartOrEmpty(
@@ -47,8 +51,9 @@ class ChannelChartsSection extends StatelessWidget {
           icon: Icons.speed_outlined,
           accentColor: Colors.indigo,
           samples: geometry.paceSeries,
+          unitSystem: unitSystem,
           invertY: true,
-          formatValue: formatPace,
+          formatValue: (v) => formatPace(v, units: unitSystem),
         ),
       ],
     );
@@ -63,6 +68,7 @@ class _ChannelChartOrEmpty extends StatelessWidget {
     required this.icon,
     required this.accentColor,
     required this.samples,
+    required this.unitSystem,
     required this.formatValue,
     this.invertY = false,
   });
@@ -73,6 +79,7 @@ class _ChannelChartOrEmpty extends StatelessWidget {
   final IconData icon;
   final Color accentColor;
   final List<ChartSample> samples;
+  final UnitSystem unitSystem;
   final String Function(double value) formatValue;
   final bool invertY;
 
@@ -102,6 +109,7 @@ class _ChannelChartOrEmpty extends StatelessWidget {
       icon: icon,
       accentColor: accentColor,
       samples: samples,
+      unitSystem: unitSystem,
       formatValue: formatValue,
       invertY: invertY,
     );
@@ -115,6 +123,7 @@ class _InteractiveChannelChartCard extends StatefulWidget {
     required this.icon,
     required this.accentColor,
     required this.samples,
+    required this.unitSystem,
     required this.formatValue,
     required this.invertY,
   });
@@ -123,6 +132,7 @@ class _InteractiveChannelChartCard extends StatefulWidget {
   final IconData icon;
   final Color accentColor;
   final List<ChartSample> samples;
+  final UnitSystem unitSystem;
   final String Function(double value) formatValue;
   final bool invertY;
 
@@ -162,7 +172,7 @@ class _InteractiveChannelChartCardState
         _scrubIndex != null ? samples[_scrubIndex!] : null;
 
     final subtitle = activeSample != null
-        ? '${widget.formatValue(activeSample.value)} • ${(activeSample.distanceMeters / 1000.0).toStringAsFixed(2)} km'
+        ? '${widget.formatValue(activeSample.value)} • ${formatDistance(activeSample.distanceMeters, units: widget.unitSystem)}'
         : 'Avg ${widget.formatValue(avgVal)} • Max ${widget.formatValue(widget.invertY ? minVal : maxVal)}';
 
     return Card(

@@ -6,6 +6,7 @@ import 'activity_formatters.dart';
 import 'channel_charts_section.dart';
 import 'lap_table_card.dart';
 import 'route_map_card.dart';
+import 'settings_sheet.dart';
 
 class WorkbenchScreen extends StatefulWidget {
   const WorkbenchScreen({
@@ -14,12 +15,20 @@ class WorkbenchScreen extends StatefulWidget {
     required this.sourceFileName,
     required this.platformIoPort,
     required this.onClose,
+    this.unitSystem = UnitSystem.metric,
+    this.themeMode = ThemeMode.system,
+    this.onUnitSystemChanged,
+    this.onThemeModeChanged,
   });
 
   final ParseResult initialResult;
   final String sourceFileName;
   final PlatformIoPort platformIoPort;
   final VoidCallback onClose;
+  final UnitSystem unitSystem;
+  final ThemeMode themeMode;
+  final ValueChanged<UnitSystem>? onUnitSystemChanged;
+  final ValueChanged<ThemeMode>? onThemeModeChanged;
 
   @override
   State<WorkbenchScreen> createState() => _WorkbenchScreenState();
@@ -29,10 +38,14 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   int _selectedTab = 0;
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
+  late TextEditingController _fileNameController;
+  bool _hasCustomFileName = false;
   late SportType _sportType;
   ExportFormat _exportFormat = ExportFormat.fit;
   bool _isExporting = false;
   String? _exportStatusMessage;
+  bool _titleCopied = false;
+  bool _descriptionCopied = false;
   ActivityDisplayGeometry? _displayGeometry;
   bool? _isMapTilesAvailable;
 
@@ -43,7 +56,15 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     _titleController = TextEditingController(text: activity.title);
     _descriptionController = TextEditingController(text: activity.description);
     _sportType = activity.sportType;
+    _fileNameController = TextEditingController(text: _smartDefaultFileName);
+    _titleController.addListener(_onTitleChanged);
     _loadVisualInspectorData();
+  }
+
+  void _onTitleChanged() {
+    if (!_hasCustomFileName) {
+      _fileNameController.text = _smartDefaultFileName;
+    }
   }
 
   Future<void> _loadVisualInspectorData() async {
@@ -68,8 +89,10 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
 
   @override
   void dispose() {
+    _titleController.removeListener(_onTitleChanged);
     _titleController.dispose();
     _descriptionController.dispose();
+    _fileNameController.dispose();
     super.dispose();
   }
 
@@ -81,14 +104,17 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
         sportType: _sportType,
       );
 
-  String get _suggestedExportFileName {
-    final raw = (_currentEdit.title ?? widget.initialResult.activity.title)
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'^_+|_+$'), '');
-    final base = raw.isEmpty ? 'activity' : raw;
-    return '$base.${_exportFormat.extension}';
-  }
+  String get _smartDefaultFileName => buildSmartExportFileName(
+        startTime: widget.initialResult.summary.startTime,
+        title: _currentEdit.title ?? widget.initialResult.activity.title,
+        extension: _exportFormat.extension,
+      );
+
+  String get _resolvedExportFileName => sanitizeExportFileName(
+        _fileNameController.text,
+        extension: _exportFormat.extension,
+        fallback: _smartDefaultFileName,
+      );
 
   Future<ExportResult> _buildExportResult() {
     switch (_exportFormat) {
@@ -116,15 +142,16 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       _exportStatusMessage = null;
     });
     try {
+      final fileName = _resolvedExportFileName;
       final result = await _buildExportResult();
       final saved = await widget.platformIoPort.saveExportFile(
-        suggestedFileName: _suggestedExportFileName,
+        suggestedFileName: fileName,
         bytes: result.bytes,
       );
       if (!mounted) return;
       setState(() {
         _exportStatusMessage = saved
-            ? 'Export File saved as $_suggestedExportFileName.'
+            ? 'Export File saved as $fileName.'
             : 'Save cancelled.';
       });
     } finally {
@@ -140,20 +167,51 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       _exportStatusMessage = null;
     });
     try {
+      final fileName = _resolvedExportFileName;
       final result = await _buildExportResult();
       await widget.platformIoPort.shareExportFile(
-        fileName: _suggestedExportFileName,
+        fileName: fileName,
         bytes: result.bytes,
       );
       if (!mounted) return;
       setState(() {
-        _exportStatusMessage = 'Shared $_suggestedExportFileName.';
+        _exportStatusMessage = 'Shared $fileName.';
       });
     } finally {
       if (mounted) {
         setState(() => _isExporting = false);
       }
     }
+  }
+
+  Future<void> _copyTitle() async {
+    final title = _currentEdit.title ?? widget.initialResult.activity.title;
+    await widget.platformIoPort.copyToClipboard(title);
+    if (!mounted) return;
+    setState(() {
+      _titleCopied = true;
+      _descriptionCopied = false;
+    });
+  }
+
+  Future<void> _copyDescription() async {
+    final description = _currentEdit.description ?? '';
+    await widget.platformIoPort.copyToClipboard(description);
+    if (!mounted) return;
+    setState(() {
+      _descriptionCopied = true;
+      _titleCopied = false;
+    });
+  }
+
+  Future<void> _openStravaUploadPage() async {
+    final launched = await widget.platformIoPort.launchExternalUrl(
+      Uri.parse('https://www.strava.com/upload/select'),
+    );
+    if (!mounted || launched) return;
+    setState(() {
+      _exportStatusMessage = 'Could not open Strava upload page.';
+    });
   }
 
   @override
@@ -167,6 +225,22 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: widget.onClose,
         ),
+        actions: [
+          IconButton(
+            key: const Key('settings-button'),
+            tooltip: 'Settings',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () {
+              showSettingsSheet(
+                context,
+                initialUnitSystem: widget.unitSystem,
+                initialThemeMode: widget.themeMode,
+                onUnitSystemChanged: (u) => widget.onUnitSystemChanged?.call(u),
+                onThemeModeChanged: (m) => widget.onThemeModeChanged?.call(m),
+              );
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -183,6 +257,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                   currentSportType: _sportType,
                   displayGeometry: _displayGeometry,
                   isMapTilesAvailable: _isMapTilesAvailable,
+                  unitSystem: widget.unitSystem,
                 ),
                 _EditTab(
                   titleController: _titleController,
@@ -197,17 +272,34 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                 ),
                 _ExportTab(
                   exportFormat: _exportFormat,
-                  suggestedFileName: _suggestedExportFileName,
+                  fileNameController: _fileNameController,
                   isExporting: _isExporting,
                   statusMessage: _exportStatusMessage,
+                  onFileNameChanged: (value) {
+                    _hasCustomFileName = value.trim().isNotEmpty;
+                  },
                   onFormatChanged: (format) {
                     setState(() {
                       _exportFormat = format;
                       _exportStatusMessage = null;
+                      if (_hasCustomFileName) {
+                        _fileNameController.text = sanitizeExportFileName(
+                          _fileNameController.text,
+                          extension: format.extension,
+                          fallback: _smartDefaultFileName,
+                        );
+                      } else {
+                        _fileNameController.text = _smartDefaultFileName;
+                      }
                     });
                   },
                   onSave: _handleSave,
                   onShare: _handleShare,
+                  titleCopied: _titleCopied,
+                  descriptionCopied: _descriptionCopied,
+                  onCopyTitle: _copyTitle,
+                  onCopyDescription: _copyDescription,
+                  onOpenStravaUpload: _openStravaUploadPage,
                 ),
               ],
             ),
@@ -287,6 +379,7 @@ class _OverviewTab extends StatelessWidget {
     required this.currentSportType,
     required this.displayGeometry,
     required this.isMapTilesAvailable,
+    required this.unitSystem,
   });
 
   final Activity activity;
@@ -296,14 +389,18 @@ class _OverviewTab extends StatelessWidget {
   final SportType currentSportType;
   final ActivityDisplayGeometry? displayGeometry;
   final bool? isMapTilesAvailable;
+  final UnitSystem unitSystem;
 
   @override
   Widget build(BuildContext context) {
-    final distanceKm = (summary.gpsDistanceMeters / 1000.0).toStringAsFixed(2);
+    final distanceText =
+        formatDistance(summary.gpsDistanceMeters, units: unitSystem);
     final durationText = formatDuration(summary.duration);
     final paceText = summary.avgPaceSecondsPerKm != null
-        ? formatPace(summary.avgPaceSecondsPerKm!)
+        ? formatPace(summary.avgPaceSecondsPerKm!, units: unitSystem)
         : '—';
+    final elevationText =
+        formatElevation(summary.elevationGainMeters, units: unitSystem);
     final avgHrText =
         summary.avgHeartRateBpm != null ? '${summary.avgHeartRateBpm} bpm' : '—';
     final maxHrText =
@@ -350,7 +447,7 @@ class _OverviewTab extends StatelessWidget {
         Card(
           child: Column(
             children: [
-              _StatRow(label: 'Distance', value: '$distanceKm km'),
+              _StatRow(label: 'Distance', value: distanceText),
               const Divider(height: 1),
               _StatRow(label: 'Duration', value: durationText),
               const Divider(height: 1),
@@ -358,7 +455,7 @@ class _OverviewTab extends StatelessWidget {
               const Divider(height: 1),
               _StatRow(
                 label: 'Elevation Gain',
-                value: '${summary.elevationGainMeters.toStringAsFixed(0)} m',
+                value: elevationText,
               ),
               const Divider(height: 1),
               _StatRow(label: 'Average Heart Rate', value: avgHrText),
@@ -393,11 +490,17 @@ class _OverviewTab extends StatelessWidget {
         ),
         if (displayGeometry != null) ...[
           const SizedBox(height: 12),
-          ChannelChartsSection(geometry: displayGeometry!),
+          ChannelChartsSection(
+            geometry: displayGeometry!,
+            unitSystem: unitSystem,
+          ),
         ],
         if (activity.laps.isNotEmpty) ...[
           const SizedBox(height: 12),
-          LapTableCard(laps: activity.laps),
+          LapTableCard(
+            laps: activity.laps,
+            unitSystem: unitSystem,
+          ),
         ],
       ],
     );
@@ -502,83 +605,160 @@ class _EditTab extends StatelessWidget {
 class _ExportTab extends StatelessWidget {
   const _ExportTab({
     required this.exportFormat,
-    required this.suggestedFileName,
+    required this.fileNameController,
     required this.isExporting,
     required this.statusMessage,
+    required this.onFileNameChanged,
     required this.onFormatChanged,
     required this.onSave,
     required this.onShare,
+    required this.titleCopied,
+    required this.descriptionCopied,
+    required this.onCopyTitle,
+    required this.onCopyDescription,
+    required this.onOpenStravaUpload,
   });
 
   final ExportFormat exportFormat;
-  final String suggestedFileName;
+  final TextEditingController fileNameController;
   final bool isExporting;
   final String? statusMessage;
+  final ValueChanged<String> onFileNameChanged;
   final ValueChanged<ExportFormat> onFormatChanged;
   final VoidCallback onSave;
   final VoidCallback onShare;
+  final bool titleCopied;
+  final bool descriptionCopied;
+  final VoidCallback onCopyTitle;
+  final VoidCallback onCopyDescription;
+  final VoidCallback onOpenStravaUpload;
 
   @override
   Widget build(BuildContext context) {
     final shortLabel = exportFormat.extension.toUpperCase();
-    return Padding(
+    return ListView(
       padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SegmentedButton<ExportFormat>(
-            key: const Key('export-format-selector'),
-            segments: [
-              for (final format in ExportFormat.values)
-                ButtonSegment<ExportFormat>(
-                  value: format,
-                  label: Text(format.extension.toUpperCase()),
-                ),
-            ],
-            selected: {exportFormat},
-            onSelectionChanged: (selection) {
-              if (selection.isNotEmpty) {
-                onFormatChanged(selection.first);
-              }
-            },
+      children: [
+        SegmentedButton<ExportFormat>(
+          key: const Key('export-format-selector'),
+          segments: [
+            for (final format in ExportFormat.values)
+              ButtonSegment<ExportFormat>(
+                value: format,
+                label: Text(format.extension.toUpperCase()),
+              ),
+          ],
+          selected: {exportFormat},
+          onSelectionChanged: (selection) {
+            if (selection.isNotEmpty) {
+              onFormatChanged(selection.first);
+            }
+          },
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('export-filename-field'),
+          controller: fileNameController,
+          onChanged: onFileNameChanged,
+          decoration: InputDecoration(
+            labelText: 'Export File (${exportFormat.displayName})',
+            prefixIcon: const Icon(Icons.description_outlined),
+            border: const OutlineInputBorder(),
           ),
+        ),
+        const SizedBox(height: 20),
+        FilledButton.icon(
+          onPressed: isExporting ? null : onSave,
+          icon: const Icon(Icons.save_alt),
+          label: Text('Save $shortLabel'),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: isExporting ? null : onShare,
+          icon: const Icon(Icons.share),
+          label: Text('Share $shortLabel'),
+        ),
+        if (statusMessage != null) ...[
           const SizedBox(height: 16),
           Card(
-            child: ListTile(
-              leading: const Icon(Icons.description_outlined),
-              title: Text('Export File (${exportFormat.displayName})'),
-              subtitle: Text(suggestedFileName),
-            ),
-          ),
-          const SizedBox(height: 20),
-          FilledButton.icon(
-            onPressed: isExporting ? null : onSave,
-            icon: const Icon(Icons.save_alt),
-            label: Text('Save $shortLabel'),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: isExporting ? null : onShare,
-            icon: const Icon(Icons.share),
-            label: Text('Share $shortLabel'),
-          ),
-          if (statusMessage != null) ...[
-            const SizedBox(height: 16),
-            Card(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  statusMessage!,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                  ),
+            color: Theme.of(context).colorScheme.primaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                statusMessage!,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
                 ),
               ),
             ),
-          ],
+          ),
         ],
-      ),
+        const SizedBox(height: 20),
+        Card(
+          key: const Key('strava-upload-helper-card'),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Strava Upload Helper',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Copy your edited metadata and open Strava\'s manual upload page.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      key: const Key('copy-title-button'),
+                      onPressed: onCopyTitle,
+                      icon: Icon(
+                        titleCopied ? Icons.check : Icons.content_copy,
+                        size: 18,
+                      ),
+                      label: const Text('Copy Title'),
+                    ),
+                    OutlinedButton.icon(
+                      key: const Key('copy-description-button'),
+                      onPressed: onCopyDescription,
+                      icon: Icon(
+                        descriptionCopied ? Icons.check : Icons.content_copy,
+                        size: 18,
+                      ),
+                      label: const Text('Copy Description'),
+                    ),
+                  ],
+                ),
+                if (titleCopied || descriptionCopied) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    titleCopied ? 'Title copied' : 'Description copied',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  key: const Key('open-strava-upload-button'),
+                  onPressed: onOpenStravaUpload,
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('Open Strava Upload Page'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

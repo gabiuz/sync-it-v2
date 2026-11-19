@@ -5,10 +5,11 @@ import 'package:flutter/material.dart';
 import '../core/core_engine.dart';
 import '../port/device_platform_io_port.dart';
 import '../port/platform_io_port.dart';
+import 'activity_formatters.dart';
 import 'start_screen.dart';
 import 'workbench_screen.dart';
 
-class SyncItApp extends StatelessWidget {
+class SyncItApp extends StatefulWidget {
   const SyncItApp({
     super.key,
     this.platformIoPort,
@@ -17,10 +18,18 @@ class SyncItApp extends StatelessWidget {
   final PlatformIoPort? platformIoPort;
 
   @override
+  State<SyncItApp> createState() => _SyncItAppState();
+}
+
+class _SyncItAppState extends State<SyncItApp> {
+  UnitSystem _unitSystem = UnitSystem.metric;
+  ThemeMode _themeMode = ThemeMode.system;
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Sync-It',
-      themeMode: ThemeMode.system,
+      themeMode: _themeMode,
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: Colors.deepOrange,
@@ -32,16 +41,30 @@ class SyncItApp extends StatelessWidget {
         brightness: Brightness.dark,
       ),
       home: _SyncItShell(
-        platformIoPort: platformIoPort ?? const DevicePlatformIoPort(),
+        platformIoPort: widget.platformIoPort ?? const DevicePlatformIoPort(),
+        unitSystem: _unitSystem,
+        themeMode: _themeMode,
+        onUnitSystemChanged: (units) => setState(() => _unitSystem = units),
+        onThemeModeChanged: (mode) => setState(() => _themeMode = mode),
       ),
     );
   }
 }
 
 class _SyncItShell extends StatefulWidget {
-  const _SyncItShell({required this.platformIoPort});
+  const _SyncItShell({
+    required this.platformIoPort,
+    required this.unitSystem,
+    required this.themeMode,
+    required this.onUnitSystemChanged,
+    required this.onThemeModeChanged,
+  });
 
   final PlatformIoPort platformIoPort;
+  final UnitSystem unitSystem;
+  final ThemeMode themeMode;
+  final ValueChanged<UnitSystem> onUnitSystemChanged;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
 
   @override
   State<_SyncItShell> createState() => _SyncItShellState();
@@ -135,6 +158,10 @@ class _SyncItShellState extends State<_SyncItShell> {
       initialResult: result,
       sourceFileName: _sourceFileName ?? 'activity.gpx',
       platformIoPort: widget.platformIoPort,
+      unitSystem: widget.unitSystem,
+      themeMode: widget.themeMode,
+      onUnitSystemChanged: widget.onUnitSystemChanged,
+      onThemeModeChanged: widget.onThemeModeChanged,
       onClose: () => setState(() {
         _parseResult = null;
         _sourceFileName = null;

@@ -9,9 +9,11 @@ class LapTableCard extends StatelessWidget {
   const LapTableCard({
     super.key,
     required this.laps,
+    this.unitSystem = UnitSystem.metric,
   });
 
   final List<Lap> laps;
+  final UnitSystem unitSystem;
 
   @override
   Widget build(BuildContext context) {
@@ -95,10 +97,13 @@ class LapTableCard extends StatelessWidget {
   ) {
     final dist = lap.distanceMeters;
     final distText =
-        dist != null ? '${(dist / 1000.0).toStringAsFixed(2)} km' : '—';
+        dist != null ? formatDistance(dist, units: unitSystem) : '—';
     final durText = formatDuration(lap.duration);
     final paceText = (dist != null && dist > 0 && lap.duration.inSeconds > 0)
-        ? formatPace(lap.duration.inMilliseconds / 1000.0 / (dist / 1000.0))
+        ? formatPace(
+            lap.duration.inMilliseconds / 1000.0 / (dist / 1000.0),
+            units: unitSystem,
+          )
         : '—';
     final hrText =
         lap.avgHeartRateBpm != null ? '${lap.avgHeartRateBpm} bpm' : '—';

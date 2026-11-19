@@ -1,9 +1,10 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'platform_io_port.dart';
 
@@ -66,6 +67,16 @@ class DevicePlatformIoPort implements PlatformIoPort {
     } catch (_) {
       return false;
     }
+  }
+
+  @override
+  Future<void> copyToClipboard(String text) {
+    return Clipboard.setData(ClipboardData(text: text));
+  }
+
+  @override
+  Future<bool> launchExternalUrl(Uri url) {
+    return launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
   static String _mimeTypeForFileName(String fileName) {
