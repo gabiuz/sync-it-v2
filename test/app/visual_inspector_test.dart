@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -7,6 +9,125 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sync_it/app/sync_it_app.dart';
 import 'package:sync_it/core/core_engine.dart';
 import 'package:sync_it/port/platform_io_port.dart';
+
+// 1x1 transparent PNG bytes.
+final _transparentPng = Uint8List.fromList(const [
+  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+  0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+  0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+  0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41,
+  0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+  0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+  0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+  0x42, 0x60, 0x82,
+]);
+
+class _FakeTileHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) => _FakeTileHttpClient();
+}
+
+class _FakeTileHttpClient implements HttpClient {
+  @override
+  bool autoUncompress = true;
+
+  @override
+  Future<HttpClientRequest> getUrl(Uri url) async => _FakeTileHttpRequest();
+
+  @override
+  Future<HttpClientRequest> openUrl(String method, Uri url) async =>
+      _FakeTileHttpRequest();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+class _FakeTileHttpRequest implements HttpClientRequest {
+  @override
+  final HttpHeaders headers = _FakeHttpHeaders();
+
+  @override
+  bool followRedirects = true;
+
+  @override
+  int maxRedirects = 5;
+
+  @override
+  bool persistentConnection = true;
+
+  @override
+  int contentLength = -1;
+
+  @override
+  Future<void> addStream(Stream<List<int>> stream) async {}
+
+  @override
+  Future<HttpClientResponse> close() async => _FakeTileHttpResponse();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+class _FakeHttpHeaders implements HttpHeaders {
+  @override
+  void add(String name, Object value, {bool preserveHeaderCase = false}) {}
+
+  @override
+  void set(String name, Object value, {bool preserveHeaderCase = false}) {}
+
+  @override
+  void forEach(void Function(String name, List<String> values) action) {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+class _FakeTileHttpResponse extends Stream<List<int>>
+    implements HttpClientResponse {
+  @override
+  int get statusCode => 200;
+
+  @override
+  String get reasonPhrase => 'OK';
+
+  @override
+  int get contentLength => _transparentPng.length;
+
+  @override
+  bool get isRedirect => false;
+
+  @override
+  List<RedirectInfo> get redirects => const [];
+
+  @override
+  bool get persistentConnection => false;
+
+  @override
+  HttpHeaders get headers => _FakeHttpHeaders();
+
+  @override
+  HttpClientResponseCompressionState get compressionState =>
+      HttpClientResponseCompressionState.notCompressed;
+
+  @override
+  StreamSubscription<List<int>> listen(
+    void Function(List<int> event)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    return Stream<List<int>>.value(_transparentPng).listen(
+      onData,
+      onError: onError,
+      onDone: onDone,
+      cancelOnError: cancelOnError,
+    );
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
 
 class _InspectorFakePort implements PlatformIoPort {
   _InspectorFakePort({
@@ -145,6 +266,49 @@ void main() {
   testWidgets(
     'Overview renders interactive OpenStreetMap route map, channel charts, and structured lap table when online',
     (tester) async {
+      await HttpOverrides.runZoned(() async {
+        final port = _InspectorFakePort(
+          nextPickedFile: PickedSourceFile(
+            fileName: 'morning_run.tcx',
+            bytes: _buildOutdoorTcx(),
+          ),
+          online: true,
+        );
+
+        await tester.pumpWidget(SyncItApp(platformIoPort: port));
+        await tester.tap(find.byKey(const Key('import-source-button')));
+        await _pumpUntilSettledAsync(tester);
+
+        expect(find.byType(FlutterMap), findsOneWidget);
+        expect(find.byKey(const Key('osm-route-map')), findsOneWidget);
+        expect(find.byKey(const Key('offline-route-canvas')), findsNothing);
+
+        // Scroll down from the title card (above the interactive map) to verify
+        // charts, scrubbing, and lap breakdown table.
+        await tester.dragFrom(const Offset(100, 120), const Offset(0, -400));
+        await tester.pump();
+        await tester.dragFrom(const Offset(100, 120), const Offset(0, -400));
+        await tester.pump();
+        expect(find.byKey(const Key('chart-heart-rate')), findsOneWidget);
+
+        await tester.dragFrom(const Offset(100, 120), const Offset(0, -300));
+        await tester.pump();
+        expect(find.byKey(const Key('chart-elevation')), findsOneWidget);
+        expect(find.byKey(const Key('chart-pace')), findsOneWidget);
+
+        await tester.dragFrom(const Offset(100, 120), const Offset(0, -450));
+        await tester.pump();
+        expect(find.byKey(const Key('lap-breakdown-table')), findsOneWidget);
+        expect(find.text('152 bpm'), findsOneWidget);
+        expect(find.text('162 bpm'), findsOneWidget);
+      }, createHttpClient: (ctx) => _FakeTileHttpOverrides().createHttpClient(ctx));
+    },
+  );
+
+  testWidgets(
+    'Overview falls back to offline vector-canvas when online check passes but tile loading fails at runtime',
+    (tester) async {
+      PaintingBinding.instance.imageCache.clear();
       final port = _InspectorFakePort(
         nextPickedFile: PickedSourceFile(
           fileName: 'morning_run.tcx',
@@ -156,29 +320,15 @@ void main() {
       await tester.pumpWidget(SyncItApp(platformIoPort: port));
       await tester.tap(find.byKey(const Key('import-source-button')));
       await _pumpUntilSettledAsync(tester);
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(seconds: 1));
+        if (find.byKey(const Key('offline-route-canvas')).evaluate().isNotEmpty) {
+          break;
+        }
+      }
 
-      expect(find.byType(FlutterMap), findsOneWidget);
-      expect(find.byKey(const Key('osm-route-map')), findsOneWidget);
-      expect(find.byKey(const Key('offline-route-canvas')), findsNothing);
-
-      // Scroll down from the title card (above the interactive map) to verify
-      // charts, scrubbing, and lap breakdown table.
-      await tester.dragFrom(const Offset(100, 120), const Offset(0, -400));
-      await tester.pump();
-      await tester.dragFrom(const Offset(100, 120), const Offset(0, -400));
-      await tester.pump();
-      expect(find.byKey(const Key('chart-heart-rate')), findsOneWidget);
-
-      await tester.dragFrom(const Offset(100, 120), const Offset(0, -300));
-      await tester.pump();
-      expect(find.byKey(const Key('chart-elevation')), findsOneWidget);
-      expect(find.byKey(const Key('chart-pace')), findsOneWidget);
-
-      await tester.dragFrom(const Offset(100, 120), const Offset(0, -450));
-      await tester.pump();
-      expect(find.byKey(const Key('lap-breakdown-table')), findsOneWidget);
-      expect(find.text('152 bpm'), findsOneWidget);
-      expect(find.text('162 bpm'), findsOneWidget);
+      expect(find.byKey(const Key('offline-route-canvas')), findsOneWidget);
+      expect(find.byType(FlutterMap), findsNothing);
     },
   );
 
@@ -196,6 +346,12 @@ void main() {
       await tester.pumpWidget(SyncItApp(platformIoPort: port));
       await tester.tap(find.byKey(const Key('import-source-button')));
       await _pumpUntilSettledAsync(tester);
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(seconds: 1));
+        if (find.byKey(const Key('offline-route-canvas')).evaluate().isNotEmpty) {
+          break;
+        }
+      }
 
       expect(find.byKey(const Key('offline-route-canvas')), findsOneWidget);
       expect(find.byType(FlutterMap), findsNothing);

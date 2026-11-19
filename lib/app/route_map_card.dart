@@ -7,9 +7,9 @@ import 'package:latlong2/latlong.dart' show LatLng;
 import '../core/core_engine.dart';
 
 /// Displays an interactive OpenStreetMap route map when online, an interactive
-/// vector-canvas polyline fallback when offline, or a clean mapless state when
-/// the Activity has no GPS Trackpoints.
-class RouteMapCard extends StatelessWidget {
+/// vector-canvas polyline fallback when offline or when tile loading fails, or
+/// a clean mapless state when the Activity has no GPS Trackpoints.
+class RouteMapCard extends StatefulWidget {
   const RouteMapCard({
     super.key,
     required this.routePoints,
@@ -20,11 +20,41 @@ class RouteMapCard extends StatelessWidget {
   final bool? isOnline;
 
   @override
+  State<RouteMapCard> createState() => _RouteMapCardState();
+}
+
+class _RouteMapCardState extends State<RouteMapCard> {
+  int _tileErrorCount = 0;
+  bool _runtimeTileFallback = false;
+
+  @override
+  void didUpdateWidget(covariant RouteMapCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isOnline != widget.isOnline ||
+        oldWidget.routePoints != widget.routePoints) {
+      _tileErrorCount = 0;
+      _runtimeTileFallback = false;
+    }
+  }
+
+  void _handleTileError() {
+    if (_runtimeTileFallback) return;
+    _tileErrorCount++;
+    if (_tileErrorCount >= 3) {
+      Future.microtask(() {
+        if (mounted && !_runtimeTileFallback) {
+          setState(() => _runtimeTileFallback = true);
+        }
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
-    if (routePoints.isEmpty) {
+    if (widget.routePoints.isEmpty) {
       return Card(
         key: const Key('mapless-indoor-state'),
         child: Padding(
@@ -65,9 +95,9 @@ class RouteMapCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
         height: 240,
-        child: isOnline == null
+        child: widget.isOnline == null
             ? const Center(child: CircularProgressIndicator())
-            : isOnline!
+            : (widget.isOnline! && !_runtimeTileFallback)
                 ? _buildOnlineMap(context, colors)
                 : _buildOfflineCanvas(context, colors),
       ),
@@ -76,7 +106,7 @@ class RouteMapCard extends StatelessWidget {
 
   Widget _buildOnlineMap(BuildContext context, ColorScheme colors) {
     final latLngs = [
-      for (final pt in routePoints) LatLng(pt.latitude, pt.longitude),
+      for (final pt in widget.routePoints) LatLng(pt.latitude, pt.longitude),
     ];
     final bounds = LatLngBounds.fromPoints(latLngs);
     final hasArea =
@@ -107,6 +137,7 @@ class RouteMapCard extends StatelessWidget {
               tileProvider: NetworkTileProvider(
                 cachingProvider: const DisabledMapCachingProvider(),
               ),
+              errorTileCallback: (_, _, _) => _handleTileError(),
             ),
             PolylineLayer(
               polylines: [
@@ -173,7 +204,7 @@ class RouteMapCard extends StatelessWidget {
             child: CustomPaint(
               key: const Key('offline-route-canvas'),
               painter: _OfflineRoutePainter(
-                points: routePoints,
+                points: widget.routePoints,
                 lineColor: colors.primary,
                 gridColor: colors.outlineVariant.withValues(alpha: 0.45),
                 startColor: Colors.green,
