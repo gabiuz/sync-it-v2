@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../core/core_engine.dart';
@@ -64,16 +66,23 @@ class _SyncItShellState extends State<_SyncItShell> {
         return;
       }
 
-      final isFit = _isFitSource(picked.fileName, picked.bytes);
-      final result = isFit
-          ? await CoreEngine.parseFitInIsolate(
-              picked.bytes,
-              fileName: picked.fileName,
-            )
-          : await CoreEngine.parseGpxInIsolate(
-              picked.bytes,
-              fileName: picked.fileName,
-            );
+      final ParseResult result;
+      if (_isFitSource(picked.fileName, picked.bytes)) {
+        result = await CoreEngine.parseFitInIsolate(
+          picked.bytes,
+          fileName: picked.fileName,
+        );
+      } else if (_isTcxSource(picked.fileName, picked.bytes)) {
+        result = await CoreEngine.parseTcxInIsolate(
+          picked.bytes,
+          fileName: picked.fileName,
+        );
+      } else {
+        result = await CoreEngine.parseGpxInIsolate(
+          picked.bytes,
+          fileName: picked.fileName,
+        );
+      }
       if (!mounted) return;
       setState(() {
         _parseResult = result;
@@ -102,6 +111,13 @@ class _SyncItShellState extends State<_SyncItShell> {
         bytes[9] == 0x46 &&
         bytes[10] == 0x49 &&
         bytes[11] == 0x54;
+  }
+
+  static bool _isTcxSource(String fileName, List<int> bytes) {
+    if (fileName.toLowerCase().endsWith('.tcx')) return true;
+    final prefixLen = bytes.length < 512 ? bytes.length : 512;
+    final head = utf8.decode(bytes.sublist(0, prefixLen), allowMalformed: true);
+    return head.contains('<TrainingCenterDatabase');
   }
 
   @override

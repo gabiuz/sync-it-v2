@@ -75,6 +75,11 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
           widget.initialResult.activity,
           _currentEdit,
         );
+      case ExportFormat.tcx:
+        return CoreEngine.exportTcxInIsolate(
+          widget.initialResult.activity,
+          _currentEdit,
+        );
     }
   }
 
@@ -340,6 +345,27 @@ class _OverviewTab extends StatelessWidget {
             ],
           ),
         ),
+        if (activity.laps.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: Text(
+                    'Lap Summaries',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                for (var i = 0; i < activity.laps.length; i++) ...[
+                  if (i > 0) const Divider(height: 1),
+                  _LapRow(index: i + 1, lap: activity.laps[i]),
+                ],
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -373,6 +399,42 @@ class _StatRow extends StatelessWidget {
       trailing: Text(
         value,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+      ),
+    );
+  }
+}
+
+class _LapRow extends StatelessWidget {
+  const _LapRow({required this.index, required this.lap});
+
+  final int index;
+  final Lap lap;
+
+  @override
+  Widget build(BuildContext context) {
+    final distText = lap.distanceMeters != null
+        ? '${(lap.distanceMeters! / 1000.0).toStringAsFixed(2)} km'
+        : '—';
+    final durText = _OverviewTab._formatDuration(lap.duration);
+    final parts = <String>[distText, durText];
+    if (lap.avgHeartRateBpm != null) {
+      parts.add('${lap.avgHeartRateBpm} bpm');
+    }
+    if (lap.avgCadenceRpm != null) {
+      parts.add('${lap.avgCadenceRpm} rpm');
+    }
+    if (lap.calories != null) {
+      parts.add('${lap.calories} kcal');
+    }
+
+    return ListTile(
+      dense: true,
+      title: Text('Lap $index'),
+      trailing: Text(
+        parts.join(' • '),
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
               fontWeight: FontWeight.w600,
             ),
       ),
