@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'fit_codec.dart';
 import 'gpx_codec.dart';
 import 'models.dart';
+import 'tcx_codec.dart';
 
 export 'models.dart';
 
@@ -23,6 +24,12 @@ class CoreEngine {
     return FitCodec.parse(bytes, fileName: fileName);
   }
 
+  /// Parses TCX [bytes] into a canonical [Activity], [ActivitySummary], and
+  /// defensive-parsing [Diagnostic]s.
+  static ParseResult parseTcx(Uint8List bytes, {String? fileName}) {
+    return TcxCodec.parse(bytes, fileName: fileName);
+  }
+
   /// Applies [edit] to [activity] and serializes a clean GPX Export File.
   static ExportResult exportGpx(Activity activity, ActivityEdit edit) {
     return GpxCodec.export(activity, edit);
@@ -31,6 +38,11 @@ class CoreEngine {
   /// Applies [edit] to [activity] and serializes a clean binary FIT Export File.
   static ExportResult exportFit(Activity activity, ActivityEdit edit) {
     return FitCodec.export(activity, edit);
+  }
+
+  /// Applies [edit] to [activity] and serializes a clean TCX Export File.
+  static ExportResult exportTcx(Activity activity, ActivityEdit edit) {
+    return TcxCodec.export(activity, edit);
   }
 
   /// Runs [parseGpx] in a background Dart isolate.
@@ -49,6 +61,14 @@ class CoreEngine {
     return Isolate.run(() => parseFit(bytes, fileName: fileName));
   }
 
+  /// Runs [parseTcx] in a background Dart isolate.
+  static Future<ParseResult> parseTcxInIsolate(
+    Uint8List bytes, {
+    String? fileName,
+  }) {
+    return Isolate.run(() => parseTcx(bytes, fileName: fileName));
+  }
+
   /// Runs [exportGpx] in a background Dart isolate.
   static Future<ExportResult> exportGpxInIsolate(
     Activity activity,
@@ -63,5 +83,13 @@ class CoreEngine {
     ActivityEdit edit,
   ) {
     return Isolate.run(() => exportFit(activity, edit));
+  }
+
+  /// Runs [exportTcx] in a background Dart isolate.
+  static Future<ExportResult> exportTcxInIsolate(
+    Activity activity,
+    ActivityEdit edit,
+  ) {
+    return Isolate.run(() => exportTcx(activity, edit));
   }
 }

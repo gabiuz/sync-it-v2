@@ -15,7 +15,7 @@ class DevicePlatformIoPort implements PlatformIoPort {
   Future<PickedSourceFile?> pickSourceFile() async {
     final file = await FilePicker.pickFile(
       type: FileType.custom,
-      allowedExtensions: const ['gpx', 'fit'],
+      allowedExtensions: const ['gpx', 'tcx', 'fit'],
     );
     if (file == null) return null;
     final bytes = await file.readAsBytes();
@@ -58,8 +58,12 @@ class DevicePlatformIoPort implements PlatformIoPort {
   }
 
   static String _mimeTypeForFileName(String fileName) {
-    if (fileName.toLowerCase().endsWith('.fit')) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.fit')) {
       return 'application/octet-stream';
+    }
+    if (lower.endsWith('.tcx')) {
+      return 'application/vnd.garmin.tcx+xml';
     }
     return 'application/gpx+xml';
   }

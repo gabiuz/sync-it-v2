@@ -43,7 +43,7 @@ class StartScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Offline activity file workbench. Inspect, edit, and export clean FIT or GPX files before uploading.',
+                    'Offline activity file workbench. Inspect, edit, and export clean FIT, TCX, or GPX files before uploading.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: colors.onSurfaceVariant,

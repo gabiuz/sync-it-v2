@@ -14,7 +14,8 @@ enum Channel {
 /// Supported Export File formats.
 enum ExportFormat {
   fit('fit', 'FIT'),
-  gpx('gpx', 'GPX 1.1');
+  gpx('gpx', 'GPX 1.1'),
+  tcx('tcx', 'TCX 2.0');
 
   const ExportFormat(this.extension, this.displayName);
 
@@ -24,16 +25,17 @@ enum ExportFormat {
 
 /// Canonical sport classification mapped across GPX/TCX/FIT.
 enum SportType {
-  running('running', 'Running'),
-  cycling('cycling', 'Cycling'),
-  walking('walking', 'Walking'),
-  hiking('hiking', 'Hiking'),
-  swimming('swimming', 'Swimming'),
-  other('other', 'Other');
+  running('running', 'Running', 'Running'),
+  cycling('cycling', 'Biking', 'Cycling'),
+  walking('walking', 'Walking', 'Walking'),
+  hiking('hiking', 'Hiking', 'Hiking'),
+  swimming('swimming', 'Swimming', 'Swimming'),
+  other('other', 'Other', 'Other');
 
-  const SportType(this.gpxName, this.displayName);
+  const SportType(this.gpxName, this.tcxName, this.displayName);
 
   final String gpxName;
+  final String tcxName;
   final String displayName;
 
   static SportType fromGpxType(String? raw) {
@@ -41,6 +43,7 @@ enum SportType {
     final normalized = raw.trim().toLowerCase();
     for (final sport in SportType.values) {
       if (sport.gpxName == normalized ||
+          sport.tcxName.toLowerCase() == normalized ||
           sport.displayName.toLowerCase() == normalized) {
         return sport;
       }
@@ -54,6 +57,8 @@ enum SportType {
     if (normalized.contains('swim')) return SportType.swimming;
     return SportType.other;
   }
+
+  static SportType fromTcxSport(String? raw) => fromGpxType(raw);
 }
 
 /// Severity of a defensive-parsing or export [Diagnostic].
@@ -68,6 +73,7 @@ enum DiagnosticCode {
   outOfOrderTrackpointsSorted,
   zeroHeartRateDropped,
   unsupportedExtensionsDropped,
+  missingFirstPointDistanceNormalized,
 }
 
 /// Non-fatal notice surfaced to the user after parsing or exporting.
@@ -118,6 +124,9 @@ class Lap {
     this.distanceMeters,
     this.avgHeartRateBpm,
     this.maxHeartRateBpm,
+    this.avgCadenceRpm,
+    this.maxCadenceRpm,
+    this.calories,
   });
 
   final DateTime startTime;
@@ -125,6 +134,13 @@ class Lap {
   final double? distanceMeters;
   final int? avgHeartRateBpm;
   final int? maxHeartRateBpm;
+  final int? avgCadenceRpm;
+  final int? maxCadenceRpm;
+  final int? calories;
+
+  Duration get duration => endTime.isAfter(startTime)
+      ? endTime.difference(startTime)
+      : Duration.zero;
 }
 
 /// Format-independent representation of a single workout.
