@@ -380,3 +380,56 @@ class ActivityDisplayGeometry {
   final List<ChartSample> paceSeries;
   final int sourceTrackpointCount;
 }
+
+/// A parsed Source File participating in multi-file Channel Blending.
+class BlendSource {
+  const BlendSource({
+    required this.id,
+    required this.fileName,
+    required this.activity,
+    this.diagnostics = const [],
+  });
+
+  final String id;
+  final String fileName;
+  final Activity activity;
+  final List<Diagnostic> diagnostics;
+}
+
+/// Configuration selecting the Base Timeline, per-Channel sources, and
+/// Activity-level metadata sources for Channel Blending.
+class BlendConfiguration {
+  const BlendConfiguration({
+    required this.baseSourceId,
+    this.channelSources = const {},
+    this.lapsSourceId,
+    this.caloriesSourceId,
+    this.sportTypeSourceId,
+    this.deviceInfoSourceId,
+  });
+
+  final String baseSourceId;
+  final Map<Channel, String?> channelSources;
+  final String? lapsSourceId;
+  final String? caloriesSourceId;
+  final String? sportTypeSourceId;
+  final String? deviceInfoSourceId;
+
+  BlendConfiguration copyWith({
+    String? baseSourceId,
+    Map<Channel, String?>? channelSources,
+    String? lapsSourceId,
+    String? caloriesSourceId,
+    String? sportTypeSourceId,
+    String? deviceInfoSourceId,
+  }) {
+    return BlendConfiguration(
+      baseSourceId: baseSourceId ?? this.baseSourceId,
+      channelSources: channelSources ?? this.channelSources,
+      lapsSourceId: lapsSourceId ?? this.lapsSourceId,
+      caloriesSourceId: caloriesSourceId ?? this.caloriesSourceId,
+      sportTypeSourceId: sportTypeSourceId ?? this.sportTypeSourceId,
+      deviceInfoSourceId: deviceInfoSourceId ?? this.deviceInfoSourceId,
+    );
+  }
+}

@@ -142,6 +142,9 @@ class _InspectorFakePort implements PlatformIoPort {
   Future<PickedSourceFile?> pickSourceFile() async => nextPickedFile;
 
   @override
+  Future<List<PickedSourceFile>> pickMultipleSourceFiles() async => const [];
+
+  @override
   Future<bool> saveExportFile({
     required String suggestedFileName,
     required Uint8List bytes,

@@ -4,11 +4,13 @@ class StartScreen extends StatelessWidget {
   const StartScreen({
     super.key,
     required this.onImportTap,
+    this.onBlendTap,
     this.isLoading = false,
     this.errorMessage,
   });
 
   final VoidCallback onImportTap;
+  final VoidCallback? onBlendTap;
   final bool isLoading;
   final String? errorMessage;
 
@@ -66,6 +68,15 @@ class StartScreen extends StatelessWidget {
                           : 'Import Source File',
                     ),
                   ),
+                  if (onBlendTap != null) ...[
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      key: const Key('blend-channels-button'),
+                      onPressed: isLoading ? null : onBlendTap,
+                      icon: const Icon(Icons.layers_outlined),
+                      label: const Text('Blend Channels (2+ Files)'),
+                    ),
+                  ],
                   if (errorMessage != null) ...[
                     const SizedBox(height: 20),
                     Card(
