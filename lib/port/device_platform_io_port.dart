@@ -27,6 +27,26 @@ class DevicePlatformIoPort implements PlatformIoPort {
   }
 
   @override
+  Future<List<PickedSourceFile>> pickMultipleSourceFiles() async {
+    final files = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['gpx', 'tcx', 'fit'],
+    );
+    if (files.isEmpty) return const [];
+    final picked = <PickedSourceFile>[];
+    for (final file in files) {
+      final bytes = await file.readAsBytes();
+      picked.add(
+        PickedSourceFile(
+          fileName: file.name,
+          bytes: bytes,
+        ),
+      );
+    }
+    return picked;
+  }
+
+  @override
   Future<bool> saveExportFile({
     required String suggestedFileName,
     required Uint8List bytes,

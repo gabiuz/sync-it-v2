@@ -1,6 +1,7 @@
 import 'dart:isolate';
 import 'dart:typed_data';
 
+import 'channel_blender.dart';
 import 'display_geometry.dart';
 import 'fit_codec.dart';
 import 'gpx_codec.dart';
@@ -147,5 +148,35 @@ class CoreEngine {
     ExportFormat format,
   ) {
     return SummaryCalculator.analyzeExportWarnings(activity, edit, format);
+  }
+
+  /// Builds a default [BlendConfiguration] from [sources], defaulting
+  /// metadata and present Channels to [baseSourceId] (or the first source) and
+  /// filling missing Channels from the first source that supplies them.
+  static BlendConfiguration defaultBlendConfiguration(
+    List<BlendSource> sources, {
+    String? baseSourceId,
+  }) {
+    return ChannelBlender.defaultConfiguration(
+      sources,
+      baseSourceId: baseSourceId,
+    );
+  }
+
+  /// Blends [sources] according to [config] on the Base Timeline, aligning
+  /// secondary Channels via ±5s linear interpolation and recomputing summaries.
+  static ParseResult blendActivities(
+    List<BlendSource> sources,
+    BlendConfiguration config,
+  ) {
+    return ChannelBlender.blend(sources, config);
+  }
+
+  /// Runs [blendActivities] in a background Dart isolate.
+  static Future<ParseResult> blendActivitiesInIsolate(
+    List<BlendSource> sources,
+    BlendConfiguration config,
+  ) {
+    return Isolate.run(() => blendActivities(sources, config));
   }
 }

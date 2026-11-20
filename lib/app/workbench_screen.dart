@@ -15,6 +15,8 @@ class WorkbenchScreen extends StatefulWidget {
     required this.sourceFileName,
     required this.platformIoPort,
     required this.onClose,
+    this.blendSources,
+    this.initialBlendConfig,
     this.unitSystem = UnitSystem.metric,
     this.themeMode = ThemeMode.system,
     this.onUnitSystemChanged,
@@ -25,6 +27,8 @@ class WorkbenchScreen extends StatefulWidget {
   final String sourceFileName;
   final PlatformIoPort platformIoPort;
   final VoidCallback onClose;
+  final List<BlendSource>? blendSources;
+  final BlendConfiguration? initialBlendConfig;
   final UnitSystem unitSystem;
   final ThemeMode themeMode;
   final ValueChanged<UnitSystem>? onUnitSystemChanged;
@@ -36,6 +40,8 @@ class WorkbenchScreen extends StatefulWidget {
 
 class _WorkbenchScreenState extends State<WorkbenchScreen> {
   int _selectedTab = 0;
+  late ParseResult _activeResult;
+  BlendConfiguration? _blendConfig;
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   late TextEditingController _fileNameController;
@@ -55,7 +61,9 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   @override
   void initState() {
     super.initState();
-    final activity = widget.initialResult.activity;
+    _activeResult = widget.initialResult;
+    _blendConfig = widget.initialBlendConfig;
+    final activity = _activeResult.activity;
     _titleController = TextEditingController(text: activity.title);
     _descriptionController = TextEditingController(text: activity.description);
     _sportType = activity.sportType;
@@ -84,7 +92,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   }
 
   Future<void> _loadVisualInspectorData() async {
-    final activity = widget.initialResult.activity;
+    final activity = _activeResult.activity;
     final onlineFuture = widget.platformIoPort.isMapTilesAvailable();
     if (activity.trackpoints.length <= 2000) {
       _displayGeometry = CoreEngine.buildDisplayGeometry(activity);
@@ -103,6 +111,77 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     });
   }
 
+  Future<void> _updateBlendConfig(BlendConfiguration nextConfig) async {
+    final sources = widget.blendSources;
+    if (sources == null) return;
+    setState(() => _blendConfig = nextConfig);
+    final blended = await CoreEngine.blendActivitiesInIsolate(
+      sources,
+      nextConfig,
+    );
+    if (!mounted) return;
+    final geometry = blended.activity.trackpoints.length <= 2000
+        ? CoreEngine.buildDisplayGeometry(blended.activity)
+        : await CoreEngine.buildDisplayGeometryInIsolate(blended.activity);
+    if (!mounted) return;
+    setState(() {
+      _activeResult = blended;
+      _sportType = blended.activity.sportType;
+      _displayGeometry = geometry;
+      if (!_hasCustomFileName) {
+        _fileNameController.text = _smartDefaultFileName;
+      }
+    });
+  }
+
+  void _onBaseTimelineChanged(String? newBaseId) {
+    final current = _blendConfig;
+    final sources = widget.blendSources;
+    if (current == null || sources == null || newBaseId == null) return;
+    if (newBaseId == current.baseSourceId) return;
+
+    final oldBaseId = current.baseSourceId;
+    final newBase = sources.firstWhere(
+      (s) => s.id == newBaseId,
+      orElse: () => sources.first,
+    );
+    final nextChannels = Map<Channel, String?>.from(current.channelSources);
+    for (final channel in Channel.values) {
+      if (nextChannels[channel] == oldBaseId &&
+          newBase.activity.availableChannels.contains(channel)) {
+        nextChannels[channel] = newBaseId;
+      }
+    }
+
+    _updateBlendConfig(
+      current.copyWith(
+        baseSourceId: newBaseId,
+        channelSources: Map.unmodifiable(nextChannels),
+        lapsSourceId:
+            current.lapsSourceId == oldBaseId ? newBaseId : current.lapsSourceId,
+        caloriesSourceId: current.caloriesSourceId == oldBaseId
+            ? newBaseId
+            : current.caloriesSourceId,
+        sportTypeSourceId: current.sportTypeSourceId == oldBaseId
+            ? newBaseId
+            : current.sportTypeSourceId,
+        deviceInfoSourceId: current.deviceInfoSourceId == oldBaseId
+            ? newBaseId
+            : current.deviceInfoSourceId,
+      ),
+    );
+  }
+
+  void _onBlendChannelChanged(Channel channel, String? sourceId) {
+    final current = _blendConfig;
+    if (current == null || sourceId == null) return;
+    final nextChannels = Map<Channel, String?>.from(current.channelSources);
+    nextChannels[channel] = sourceId;
+    _updateBlendConfig(
+      current.copyWith(channelSources: Map.unmodifiable(nextChannels)),
+    );
+  }
+
   @override
   void dispose() {
     _titleController.removeListener(_onTitleChanged);
@@ -115,7 +194,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
 
   ActivityEdit get _currentEdit => ActivityEdit(
         title: _titleController.text.trim().isEmpty
-            ? widget.initialResult.activity.title
+            ? _activeResult.activity.title
             : _titleController.text.trim(),
         description: _descriptionController.text.trim(),
         sportType: _sportType,
@@ -160,8 +239,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   }
 
   String get _smartDefaultFileName => buildSmartExportFileName(
-        startTime: widget.initialResult.summary.startTime,
-        title: _currentEdit.title ?? widget.initialResult.activity.title,
+        startTime: _activeResult.summary.startTime,
+        title: _currentEdit.title ?? _activeResult.activity.title,
         extension: _exportFormat.extension,
       );
 
@@ -175,17 +254,17 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     switch (_exportFormat) {
       case ExportFormat.fit:
         return CoreEngine.exportFitInIsolate(
-          widget.initialResult.activity,
+          _activeResult.activity,
           _currentEdit,
         );
       case ExportFormat.gpx:
         return CoreEngine.exportGpxInIsolate(
-          widget.initialResult.activity,
+          _activeResult.activity,
           _currentEdit,
         );
       case ExportFormat.tcx:
         return CoreEngine.exportTcxInIsolate(
-          widget.initialResult.activity,
+          _activeResult.activity,
           _currentEdit,
         );
     }
@@ -240,7 +319,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   }
 
   Future<void> _copyTitle() async {
-    final title = _currentEdit.title ?? widget.initialResult.activity.title;
+    final title = _currentEdit.title ?? _activeResult.activity.title;
     await widget.platformIoPort.copyToClipboard(title);
     if (!mounted) return;
     setState(() {
@@ -271,44 +350,42 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final diagnostics = widget.initialResult.diagnostics;
+    final diagnostics = _activeResult.diagnostics;
     final effectiveActivity = _distanceOverrideMeters != null
         ? CoreEngine.applyDistanceOverride(
-            widget.initialResult.activity,
+            _activeResult.activity,
             _distanceOverrideMeters,
           )
-        : widget.initialResult.activity;
+        : _activeResult.activity;
     final effectiveSummary = _distanceOverrideMeters != null
         ? ActivitySummary(
-            trackpointCount: widget.initialResult.summary.trackpointCount,
-            startTime: widget.initialResult.summary.startTime,
-            endTime: widget.initialResult.summary.endTime,
-            duration: widget.initialResult.summary.duration,
+            trackpointCount: _activeResult.summary.trackpointCount,
+            startTime: _activeResult.summary.startTime,
+            endTime: _activeResult.summary.endTime,
+            duration: _activeResult.summary.duration,
             gpsDistanceMeters: _distanceOverrideMeters!,
-            elevationGainMeters:
-                widget.initialResult.summary.elevationGainMeters,
-            avgHeartRateBpm: widget.initialResult.summary.avgHeartRateBpm,
-            maxHeartRateBpm: widget.initialResult.summary.maxHeartRateBpm,
+            elevationGainMeters: _activeResult.summary.elevationGainMeters,
+            avgHeartRateBpm: _activeResult.summary.avgHeartRateBpm,
+            maxHeartRateBpm: _activeResult.summary.maxHeartRateBpm,
             avgPaceSecondsPerKm: _distanceOverrideMeters! > 0 &&
-                    widget.initialResult.summary.duration.inMilliseconds > 0
-                ? (widget.initialResult.summary.duration.inMilliseconds /
-                        1000.0) /
+                    _activeResult.summary.duration.inMilliseconds > 0
+                ? (_activeResult.summary.duration.inMilliseconds / 1000.0) /
                     (_distanceOverrideMeters! / 1000.0)
-                : widget.initialResult.summary.avgPaceSecondsPerKm,
-            calories: widget.initialResult.summary.calories,
-            deviceInfo: widget.initialResult.summary.deviceInfo,
-            lapCount: widget.initialResult.summary.lapCount,
+                : _activeResult.summary.avgPaceSecondsPerKm,
+            calories: _activeResult.summary.calories,
+            deviceInfo: _activeResult.summary.deviceInfo,
+            lapCount: _activeResult.summary.lapCount,
           )
-        : widget.initialResult.summary;
+        : _activeResult.summary;
     final distanceDiagnostics = CoreEngine.analyzeDistance(
-      widget.initialResult.activity,
+      _activeResult.activity,
       isImperial: widget.unitSystem == UnitSystem.imperial,
       distanceOverrideMeters: _distanceOverrideMeters,
     );
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_currentEdit.title ?? widget.initialResult.activity.title),
+        title: Text(_currentEdit.title ?? _activeResult.activity.title),
         leading: IconButton(
           tooltip: 'Back to Start',
           icon: const Icon(Icons.arrow_back),
@@ -345,7 +422,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                   distanceOverrideMeters: _distanceOverrideMeters,
                   onApplyNudge: _applyNudgeDistanceOverride,
                   sourceFileName: widget.sourceFileName,
-                  currentTitle: _currentEdit.title ?? widget.initialResult.activity.title,
+                  currentTitle: _currentEdit.title ?? _activeResult.activity.title,
                   currentSportType: _sportType,
                   displayGeometry: _displayGeometry,
                   isMapTilesAvailable: _isMapTilesAvailable,
@@ -360,7 +437,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                   onDistanceOverrideChanged: _onDistanceOverrideChanged,
                   onClearDistanceOverride: _clearDistanceOverride,
                   sportType: _sportType,
-                  activity: widget.initialResult.activity,
+                  activity: _activeResult.activity,
                   strippedChannels: _strippedChannels,
                   onToggleChannel: _toggleStrippableChannel,
                   onSportChanged: (sport) {
@@ -368,12 +445,17 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                       setState(() => _sportType = sport);
                     }
                   },
+                  blendSources: widget.blendSources,
+                  blendConfig: _blendConfig,
+                  onBaseTimelineChanged: _onBaseTimelineChanged,
+                  onBlendChannelChanged: _onBlendChannelChanged,
+                  onBlendMetadataChanged: _updateBlendConfig,
                 ),
                 _ExportTab(
                   exportFormat: _exportFormat,
                   hasDistanceOverride: _distanceOverrideMeters != null,
                   exportWarnings: CoreEngine.analyzeExportWarnings(
-                    widget.initialResult.activity,
+                    _activeResult.activity,
                     _currentEdit,
                     _exportFormat,
                   ),
@@ -753,6 +835,240 @@ class _StravaTaxCard extends StatelessWidget {
   }
 }
 
+class _ChannelBlendingSection extends StatelessWidget {
+  const _ChannelBlendingSection({
+    required this.sources,
+    required this.config,
+    required this.onBaseTimelineChanged,
+    required this.onChannelChanged,
+    required this.onMetadataChanged,
+  });
+
+  final List<BlendSource> sources;
+  final BlendConfiguration config;
+  final ValueChanged<String?> onBaseTimelineChanged;
+  final void Function(Channel channel, String? sourceId) onChannelChanged;
+  final ValueChanged<BlendConfiguration> onMetadataChanged;
+
+  static String _channelLabel(Channel channel) {
+    switch (channel) {
+      case Channel.gps:
+        return 'GPS Position';
+      case Channel.elevation:
+        return 'Elevation';
+      case Channel.distance:
+        return 'Cumulative Distance';
+      case Channel.heartRate:
+        return 'Heart Rate';
+      case Channel.cadence:
+        return 'Cadence';
+      case Channel.power:
+        return 'Power';
+      case Channel.temperature:
+        return 'Temperature';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Channel Blending',
+          style: theme.textTheme.titleSmall,
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DropdownButtonFormField<String>(
+                  key: const Key('blend-base-timeline-dropdown'),
+                  initialValue: config.baseSourceId,
+                  decoration: const InputDecoration(
+                    labelText: 'Base Timeline',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final s in sources)
+                      DropdownMenuItem(
+                        value: s.id,
+                        child: Text(
+                          '${s.fileName} (${s.activity.trackpoints.length} pts)',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: onBaseTimelineChanged,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Telemetry Channels (±5s alignment)',
+                  style: theme.textTheme.labelLarge,
+                ),
+                const SizedBox(height: 8),
+                for (final channel in Channel.values) ...[
+                  Builder(
+                    builder: (context) {
+                      final matching = sources
+                          .where(
+                            (s) => s.activity.availableChannels.contains(channel),
+                          )
+                          .toList();
+                      if (matching.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Text(
+                            '${_channelLabel(channel)}: Not present in any Source File',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        );
+                      }
+                      final selectedId = config.channelSources[channel];
+                      final effectiveValue = matching.any((s) => s.id == selectedId)
+                          ? selectedId
+                          : matching.first.id;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: DropdownButtonFormField<String>(
+                          key: Key('blend-channel-${channel.name}-dropdown'),
+                          initialValue: effectiveValue,
+                          decoration: InputDecoration(
+                            labelText: _channelLabel(channel),
+                            border: const OutlineInputBorder(),
+                          ),
+                          items: [
+                            for (final s in matching)
+                              DropdownMenuItem(
+                                value: s.id,
+                                child: Text(
+                                  s.fileName,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                          onChanged: (id) => onChannelChanged(channel, id),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Text(
+                  'Activity Metadata Sources',
+                  style: theme.textTheme.labelLarge,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: const Key('blend-meta-laps-dropdown'),
+                  initialValue: config.lapsSourceId ?? config.baseSourceId,
+                  decoration: const InputDecoration(
+                    labelText: 'Laps Source',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final s in sources)
+                      DropdownMenuItem(
+                        value: s.id,
+                        child: Text(
+                          '${s.fileName} (${s.activity.laps.length} laps)',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (id) {
+                    if (id != null) {
+                      onMetadataChanged(config.copyWith(lapsSourceId: id));
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: const Key('blend-meta-calories-dropdown'),
+                  initialValue: config.caloriesSourceId ?? config.baseSourceId,
+                  decoration: const InputDecoration(
+                    labelText: 'Calories Source',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final s in sources)
+                      DropdownMenuItem(
+                        value: s.id,
+                        child: Text(
+                          '${s.fileName} (${s.activity.calories ?? '—'} kcal)',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (id) {
+                    if (id != null) {
+                      onMetadataChanged(config.copyWith(caloriesSourceId: id));
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: const Key('blend-meta-sport-dropdown'),
+                  initialValue: config.sportTypeSourceId ?? config.baseSourceId,
+                  decoration: const InputDecoration(
+                    labelText: 'Sport Type Source',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final s in sources)
+                      DropdownMenuItem(
+                        value: s.id,
+                        child: Text(
+                          '${s.fileName} (${s.activity.sportType.displayName})',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (id) {
+                    if (id != null) {
+                      onMetadataChanged(config.copyWith(sportTypeSourceId: id));
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: const Key('blend-meta-device-dropdown'),
+                  initialValue: config.deviceInfoSourceId ?? config.baseSourceId,
+                  decoration: const InputDecoration(
+                    labelText: 'Device Info Source',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    for (final s in sources)
+                      DropdownMenuItem(
+                        value: s.id,
+                        child: Text(
+                          '${s.fileName} (${s.activity.deviceInfo ?? '—'})',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (id) {
+                    if (id != null) {
+                      onMetadataChanged(config.copyWith(deviceInfoSourceId: id));
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _StatRow extends StatelessWidget {
   const _StatRow({required this.label, required this.value});
 
@@ -788,6 +1104,11 @@ class _EditTab extends StatelessWidget {
     required this.strippedChannels,
     required this.onToggleChannel,
     required this.onSportChanged,
+    this.blendSources,
+    this.blendConfig,
+    this.onBaseTimelineChanged,
+    this.onBlendChannelChanged,
+    this.onBlendMetadataChanged,
   });
 
   final TextEditingController titleController;
@@ -802,6 +1123,11 @@ class _EditTab extends StatelessWidget {
   final Set<StrippableChannel> strippedChannels;
   final void Function(StrippableChannel channel, bool keep) onToggleChannel;
   final ValueChanged<SportType?> onSportChanged;
+  final List<BlendSource>? blendSources;
+  final BlendConfiguration? blendConfig;
+  final ValueChanged<String?>? onBaseTimelineChanged;
+  final void Function(Channel channel, String? sourceId)? onBlendChannelChanged;
+  final ValueChanged<BlendConfiguration>? onBlendMetadataChanged;
 
   bool _isChannelPresent(StrippableChannel channel) {
     switch (channel) {
@@ -833,6 +1159,18 @@ class _EditTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (blendSources != null &&
+            blendSources!.length >= 2 &&
+            blendConfig != null) ...[
+          _ChannelBlendingSection(
+            sources: blendSources!,
+            config: blendConfig!,
+            onBaseTimelineChanged: onBaseTimelineChanged!,
+            onChannelChanged: onBlendChannelChanged!,
+            onMetadataChanged: onBlendMetadataChanged!,
+          ),
+          const SizedBox(height: 20),
+        ],
         TextField(
           key: const Key('edit-title-field'),
           controller: titleController,

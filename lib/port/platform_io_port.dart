@@ -15,6 +15,8 @@ class PickedSourceFile {
 abstract interface class PlatformIoPort {
   Future<PickedSourceFile?> pickSourceFile();
 
+  Future<List<PickedSourceFile>> pickMultipleSourceFiles();
+
   Future<bool> saveExportFile({
     required String suggestedFileName,
     required Uint8List bytes,
