@@ -55,6 +55,12 @@ class _InMemoryPlatformIoPort implements PlatformIoPort {
     launchedUrls.add(url);
     return true;
   }
+
+  @override
+  Future<IncomingSourceBatch?> consumeInitialIncomingSources() async => null;
+
+  @override
+  Stream<IncomingSourceBatch> get incomingSourceBatches => const Stream.empty();
 }
 
 Uint8List _utf8(String s) => Uint8List.fromList(utf8.encode(s));

@@ -510,3 +510,22 @@ class StitchResult {
         diagnostics: diagnostics,
       );
 }
+
+/// Combination mode suggested when 2 or more Source Files arrive together.
+enum MultiFileCombinationMode {
+  channelBlending,
+  sequentialStitching,
+}
+
+/// Recommendation produced by analyzing timestamp overlap across Source Files.
+class MultiFileModeSuggestion {
+  const MultiFileModeSuggestion({
+    required this.recommendedMode,
+    required this.overlapDuration,
+  });
+
+  final MultiFileCombinationMode recommendedMode;
+  final Duration overlapDuration;
+
+  bool get timestampsOverlap => overlapDuration > Duration.zero;
+}

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -80,6 +81,202 @@ class _SyncItShellState extends State<_SyncItShell> {
   StitchConfiguration? _stitchConfig;
   bool _isLoading = false;
   String? _errorMessage;
+  StreamSubscription<IncomingSourceBatch>? _incomingSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _incomingSub =
+        widget.platformIoPort.incomingSourceBatches.listen(_handleIncomingBatch);
+    _consumeInitialIncomingSources();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SyncItShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.platformIoPort != widget.platformIoPort) {
+      _incomingSub?.cancel();
+      _incomingSub = widget.platformIoPort.incomingSourceBatches
+          .listen(_handleIncomingBatch);
+    }
+  }
+
+  @override
+  void dispose() {
+    _incomingSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _consumeInitialIncomingSources() async {
+    final batch = await widget.platformIoPort.consumeInitialIncomingSources();
+    if (!mounted || batch == null || batch.isEmpty) return;
+    await _handleIncomingBatch(batch);
+  }
+
+  void _resetToStartWithError(String message) {
+    setState(() {
+      _parseResult = null;
+      _sourceFileName = null;
+      _blendSources = null;
+      _blendConfig = null;
+      _stitchSources = null;
+      _stitchParts = null;
+      _stitchConfig = null;
+      _isLoading = false;
+      _errorMessage = message;
+    });
+  }
+
+  static void _validateIncomingFile(PickedSourceFile picked) {
+    final lower = picked.fileName.toLowerCase();
+    final dotIndex = lower.lastIndexOf('.');
+    if (dotIndex != -1) {
+      final ext = lower.substring(dotIndex);
+      if (ext != '.gpx' && ext != '.tcx' && ext != '.fit') {
+        throw ActivityParseException(
+          'Unsupported file type "${picked.fileName}". '
+          'Sync-It only supports .gpx, .tcx, and .fit files.',
+        );
+      }
+    }
+  }
+
+  Future<void> _handleIncomingBatch(IncomingSourceBatch batch) async {
+    if (!mounted || batch.isEmpty) return;
+    if (batch.errors.isNotEmpty) {
+      _resetToStartWithError(batch.errors.first);
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      for (final file in batch.files) {
+        _validateIncomingFile(file);
+      }
+
+      if (batch.files.length == 1) {
+        final picked = batch.files.single;
+        final result = await _parsePickedFile(picked);
+        if (!mounted) return;
+        setState(() {
+          _parseResult = result;
+          _sourceFileName = picked.fileName;
+          _blendSources = null;
+          _blendConfig = null;
+          _stitchSources = null;
+          _stitchParts = null;
+          _stitchConfig = null;
+          _isLoading = false;
+        });
+        return;
+      }
+
+      final parsedList = await Future.wait(
+        batch.files.map(_parsePickedFile),
+      );
+      if (!mounted) return;
+      final entries = [
+        for (var i = 0; i < batch.files.length; i++)
+          (file: batch.files[i], parsed: parsedList[i]),
+      ];
+      setState(() => _isLoading = false);
+
+      final suggestion = CoreEngine.suggestMultiFileMode(
+        entries.map((e) => e.parsed.activity).toList(),
+      );
+      final chosen = await _showMultiFileModeDialog(
+        entries.map((e) => e.file.fileName).toList(),
+        suggestion,
+      );
+      if (!mounted || chosen == null) return;
+
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+
+      if (chosen == MultiFileCombinationMode.channelBlending) {
+        await _applyBlendEntries(entries);
+      } else {
+        await _applyStitchEntries(entries);
+      }
+    } on ActivityParseException catch (e) {
+      if (!mounted) return;
+      _resetToStartWithError(e.message);
+    } catch (e) {
+      if (!mounted) return;
+      _resetToStartWithError('Failed to open shared Source File: $e');
+    }
+  }
+
+  Future<MultiFileCombinationMode?> _showMultiFileModeDialog(
+    List<String> fileNames,
+    MultiFileModeSuggestion suggestion,
+  ) {
+    final recommendBlend =
+        suggestion.recommendedMode == MultiFileCombinationMode.channelBlending;
+    return showDialog<MultiFileCombinationMode>(
+      context: context,
+      builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+        final colors = theme.colorScheme;
+        return AlertDialog(
+          key: const Key('multi-file-mode-dialog'),
+          title: Text('${fileNames.length} Source Files Received'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                recommendBlend
+                    ? 'Timestamps overlap — Channel Blending is recommended to align sensors onto a Base Timeline.'
+                    : 'Timestamps are sequential — Sequential Stitching is recommended to join parts into one Activity.',
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              _ModeChoiceCard(
+                buttonKey: const Key('choose-blend-mode-button'),
+                title: 'Channel Blending',
+                subtitle: 'Combine overlapping sensors from the same workout.',
+                icon: Icons.layers_outlined,
+                isRecommended: recommendBlend,
+                recommendationKey: recommendBlend
+                    ? const Key('recommended-mode-channelBlending')
+                    : null,
+                colors: colors,
+                onTap: () => Navigator.of(dialogContext)
+                    .pop(MultiFileCombinationMode.channelBlending),
+              ),
+              const SizedBox(height: 10),
+              _ModeChoiceCard(
+                buttonKey: const Key('choose-stitch-mode-button'),
+                title: 'Sequential Stitching',
+                subtitle: 'Concatenate back-to-back parts chronologically.',
+                icon: Icons.timeline,
+                isRecommended: !recommendBlend,
+                recommendationKey: !recommendBlend
+                    ? const Key('recommended-mode-sequentialStitching')
+                    : null,
+                colors: colors,
+                onTap: () => Navigator.of(dialogContext)
+                    .pop(MultiFileCombinationMode.sequentialStitching),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   Future<ParseResult> _parsePickedFile(PickedSourceFile picked) {
     if (_isFitSource(picked.fileName, picked.bytes)) {
@@ -195,7 +392,12 @@ class _SyncItShellState extends State<_SyncItShell> {
       failureAction: 'blend',
     );
     if (entries == null || !mounted) return;
+    await _applyBlendEntries(entries);
+  }
 
+  Future<void> _applyBlendEntries(
+    List<({PickedSourceFile file, ParseResult parsed})> entries,
+  ) async {
     try {
       final sources = <BlendSource>[
         for (var i = 0; i < entries.length; i++)
@@ -234,7 +436,12 @@ class _SyncItShellState extends State<_SyncItShell> {
       failureAction: 'stitch',
     );
     if (entries == null || !mounted) return;
+    await _applyStitchEntries(entries);
+  }
 
+  Future<void> _applyStitchEntries(
+    List<({PickedSourceFile file, ParseResult parsed})> entries,
+  ) async {
     try {
       final sources = <StitchSource>[
         for (var i = 0; i < entries.length; i++)
@@ -300,6 +507,7 @@ class _SyncItShellState extends State<_SyncItShell> {
     }
 
     return WorkbenchScreen(
+      key: ValueKey(result),
       initialResult: result,
       sourceFileName: _sourceFileName ?? 'activity.gpx',
       blendSources: _blendSources,
@@ -322,6 +530,111 @@ class _SyncItShellState extends State<_SyncItShell> {
         _stitchConfig = null;
         _errorMessage = null;
       }),
+    );
+  }
+}
+
+class _ModeChoiceCard extends StatelessWidget {
+  const _ModeChoiceCard({
+    required this.buttonKey,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.isRecommended,
+    required this.recommendationKey,
+    required this.colors,
+    required this.onTap,
+  });
+
+  final Key buttonKey;
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool isRecommended;
+  final Key? recommendationKey;
+  final ColorScheme colors;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: EdgeInsets.zero,
+      color: isRecommended ? colors.primaryContainer : colors.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isRecommended ? colors.primary : colors.outlineVariant,
+          width: isRecommended ? 1.5 : 1,
+        ),
+      ),
+      child: InkWell(
+        key: buttonKey,
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                color: isRecommended
+                    ? colors.onPrimaryContainer
+                    : colors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (isRecommended) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            key: recommendationKey,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colors.primary,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              'Recommended',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: colors.onPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: isRecommended
+                            ? colors.onPrimaryContainer
+                            : colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

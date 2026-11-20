@@ -24,6 +24,60 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Open-With (.gpx, .tcx, .fit) via MIME type -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="content"/>
+                <data android:scheme="file"/>
+                <data android:mimeType="application/gpx+xml"/>
+                <data android:mimeType="application/vnd.garmin.tcx+xml"/>
+                <data android:mimeType="application/fit"/>
+                <data android:mimeType="application/octet-stream"/>
+                <data android:mimeType="text/xml"/>
+                <data android:mimeType="application/xml"/>
+            </intent-filter>
+            <!-- Open-With (.gpx, .tcx, .fit) via file extension -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="content"/>
+                <data android:scheme="file"/>
+                <data android:host="*"/>
+                <data android:mimeType="*/*"/>
+                <data android:pathPattern=".*\\.gpx"/>
+                <data android:pathPattern=".*\\.tcx"/>
+                <data android:pathPattern=".*\\.fit"/>
+                <data android:pathPattern=".*\\.GPX"/>
+                <data android:pathPattern=".*\\.TCX"/>
+                <data android:pathPattern=".*\\.FIT"/>
+            </intent-filter>
+            <!-- Share-To (single Source File) -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="application/gpx+xml"/>
+                <data android:mimeType="application/vnd.garmin.tcx+xml"/>
+                <data android:mimeType="application/fit"/>
+                <data android:mimeType="application/octet-stream"/>
+                <data android:mimeType="text/xml"/>
+                <data android:mimeType="application/xml"/>
+                <data android:mimeType="*/*"/>
+            </intent-filter>
+            <!-- Share-To (multiple Source Files) -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="application/gpx+xml"/>
+                <data android:mimeType="application/vnd.garmin.tcx+xml"/>
+                <data android:mimeType="application/fit"/>
+                <data android:mimeType="application/octet-stream"/>
+                <data android:mimeType="text/xml"/>
+                <data android:mimeType="application/xml"/>
+                <data android:mimeType="*/*"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
