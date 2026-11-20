@@ -49,6 +49,12 @@ class _FakePlatformIoPort implements PlatformIoPort {
 
   @override
   Future<bool> launchExternalUrl(Uri url) async => true;
+
+  @override
+  Future<IncomingSourceBatch?> consumeInitialIncomingSources() async => null;
+
+  @override
+  Stream<IncomingSourceBatch> get incomingSourceBatches => const Stream.empty();
 }
 
 Uint8List _buildFitWithVendorExtension() {

@@ -165,6 +165,12 @@ class _InspectorFakePort implements PlatformIoPort {
 
   @override
   Future<bool> launchExternalUrl(Uri url) async => true;
+
+  @override
+  Future<IncomingSourceBatch?> consumeInitialIncomingSources() async => null;
+
+  @override
+  Stream<IncomingSourceBatch> get incomingSourceBatches => const Stream.empty();
 }
 
 Future<void> _pumpUntilSettledAsync(WidgetTester tester) async {

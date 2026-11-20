@@ -45,6 +45,12 @@ class _StitchFakePort implements PlatformIoPort {
 
   @override
   Future<bool> launchExternalUrl(Uri url) async => true;
+
+  @override
+  Future<IncomingSourceBatch?> consumeInitialIncomingSources() async => null;
+
+  @override
+  Stream<IncomingSourceBatch> get incomingSourceBatches => const Stream.empty();
 }
 
 Uint8List _utf8(String s) => Uint8List.fromList(utf8.encode(s));

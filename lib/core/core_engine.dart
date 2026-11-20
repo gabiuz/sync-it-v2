@@ -198,4 +198,56 @@ class CoreEngine {
   ]) {
     return Isolate.run(() => stitchActivities(sources, config));
   }
+
+  /// Suggests [MultiFileCombinationMode.channelBlending] when any pair of
+  /// [activities] has overlapping timestamp ranges, or
+  /// [MultiFileCombinationMode.sequentialStitching] when they are sequential.
+  static MultiFileModeSuggestion suggestMultiFileMode(
+    List<Activity> activities,
+  ) {
+    final ranges = <({DateTime start, DateTime end})>[];
+    for (final activity in activities) {
+      if (activity.trackpoints.isEmpty) continue;
+      var minTime = activity.trackpoints.first.timestamp;
+      var maxTime = minTime;
+      for (final point in activity.trackpoints) {
+        if (point.timestamp.isBefore(minTime)) minTime = point.timestamp;
+        if (point.timestamp.isAfter(maxTime)) maxTime = point.timestamp;
+      }
+      ranges.add((start: minTime, end: maxTime));
+    }
+
+    if (ranges.length < 2) {
+      return const MultiFileModeSuggestion(
+        recommendedMode: MultiFileCombinationMode.sequentialStitching,
+        overlapDuration: Duration.zero,
+      );
+    }
+
+    ranges.sort((a, b) => a.start.compareTo(b.start));
+    var maxOverlap = Duration.zero;
+    var activeEnd = ranges.first.end;
+
+    for (var i = 1; i < ranges.length; i++) {
+      final current = ranges[i];
+      if (activeEnd.isAfter(current.start)) {
+        final overlapEnd =
+            activeEnd.isBefore(current.end) ? activeEnd : current.end;
+        final overlap = overlapEnd.difference(current.start);
+        if (overlap > maxOverlap) {
+          maxOverlap = overlap;
+        }
+      }
+      if (current.end.isAfter(activeEnd)) {
+        activeEnd = current.end;
+      }
+    }
+
+    return MultiFileModeSuggestion(
+      recommendedMode: maxOverlap > Duration.zero
+          ? MultiFileCombinationMode.channelBlending
+          : MultiFileCombinationMode.sequentialStitching,
+      overlapDuration: maxOverlap,
+    );
+  }
 }

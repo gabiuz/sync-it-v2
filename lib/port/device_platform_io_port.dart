@@ -12,6 +12,13 @@ import 'platform_io_port.dart';
 class DevicePlatformIoPort implements PlatformIoPort {
   const DevicePlatformIoPort();
 
+  static const MethodChannel _incomingMethodChannel = MethodChannel(
+    'com.gabiuz.sync_it/incoming_files',
+  );
+  static const EventChannel _incomingEventChannel = EventChannel(
+    'com.gabiuz.sync_it/incoming_files_events',
+  );
+
   @override
   Future<PickedSourceFile?> pickSourceFile() async {
     final file = await FilePicker.pickFile(
@@ -97,6 +104,60 @@ class DevicePlatformIoPort implements PlatformIoPort {
   @override
   Future<bool> launchExternalUrl(Uri url) {
     return launchUrl(url, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Future<IncomingSourceBatch?> consumeInitialIncomingSources() async {
+    try {
+      final raw = await _incomingMethodChannel.invokeMethod<dynamic>(
+        'getInitialIncomingSources',
+      );
+      final batch = _decodeIncomingBatch(raw);
+      return batch.isEmpty ? null : batch;
+    } on MissingPluginException {
+      return null;
+    } on PlatformException {
+      return null;
+    }
+  }
+
+  @override
+  Stream<IncomingSourceBatch> get incomingSourceBatches {
+    return _incomingEventChannel
+        .receiveBroadcastStream()
+        .map(_decodeIncomingBatch)
+        .where((batch) => !batch.isEmpty)
+        .handleError(
+          (_) {},
+          test: (error) =>
+              error is MissingPluginException || error is PlatformException,
+        );
+  }
+
+  static IncomingSourceBatch _decodeIncomingBatch(dynamic raw) {
+    if (raw is! Map) return const IncomingSourceBatch();
+    final files = <PickedSourceFile>[];
+    final rawFiles = raw['files'];
+    if (rawFiles is List) {
+      for (final entry in rawFiles) {
+        if (entry is! Map) continue;
+        final fileName = entry['fileName'];
+        final bytes = entry['bytes'];
+        if (fileName is String && bytes is Uint8List) {
+          files.add(PickedSourceFile(fileName: fileName, bytes: bytes));
+        }
+      }
+    }
+    final errors = <String>[];
+    final rawErrors = raw['errors'];
+    if (rawErrors is List) {
+      for (final err in rawErrors) {
+        if (err is String && err.isNotEmpty) {
+          errors.add(err);
+        }
+      }
+    }
+    return IncomingSourceBatch(files: files, errors: errors);
   }
 
   static String _mimeTypeForFileName(String fileName) {
