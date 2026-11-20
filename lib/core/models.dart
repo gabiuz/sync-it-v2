@@ -91,6 +91,7 @@ enum DiagnosticCode {
   zeroHeartRateDropped,
   unsupportedExtensionsDropped,
   missingFirstPointDistanceNormalized,
+  stitchOverlapTrimmed,
 }
 
 /// Non-fatal notice surfaced to the user after parsing or exporting.
@@ -432,4 +433,80 @@ class BlendConfiguration {
       deviceInfoSourceId: deviceInfoSourceId ?? this.deviceInfoSourceId,
     );
   }
+}
+
+/// A parsed Source File participating in multi-file Sequential Stitching.
+class StitchSource {
+  const StitchSource({
+    required this.id,
+    required this.fileName,
+    required this.activity,
+    this.diagnostics = const [],
+  });
+
+  final String id;
+  final String fileName;
+  final Activity activity;
+  final List<Diagnostic> diagnostics;
+}
+
+/// Configuration controlling multi-file Sequential Stitching behavior.
+class StitchConfiguration {
+  const StitchConfiguration({
+    this.removeGap = false,
+  });
+
+  final bool removeGap;
+
+  StitchConfiguration copyWith({bool? removeGap}) {
+    return StitchConfiguration(
+      removeGap: removeGap ?? this.removeGap,
+    );
+  }
+}
+
+/// Summary metadata for a single chronologically ordered part in a stitch.
+class StitchedPartInfo {
+  const StitchedPartInfo({
+    required this.id,
+    required this.fileName,
+    required this.effectiveStartTime,
+    required this.effectiveEndTime,
+    required this.originalTrackpointCount,
+    required this.keptTrackpointCount,
+    required this.trimmedHeadCount,
+    required this.distanceMeters,
+    required this.channels,
+  });
+
+  final String id;
+  final String fileName;
+  final DateTime effectiveStartTime;
+  final DateTime effectiveEndTime;
+  final int originalTrackpointCount;
+  final int keptTrackpointCount;
+  final int trimmedHeadCount;
+  final double distanceMeters;
+  final Set<Channel> channels;
+}
+
+/// Result returned by Sequential Stitching across 2 or more Source Files.
+class StitchResult {
+  const StitchResult({
+    required this.activity,
+    required this.summary,
+    required this.diagnostics,
+    required this.parts,
+  });
+
+  final Activity activity;
+  final ActivitySummary summary;
+  final List<Diagnostic> diagnostics;
+  final List<StitchedPartInfo> parts;
+
+  ParseResult get asParseResult => ParseResult(
+        activity: activity,
+        summary: summary,
+        diagnostics: diagnostics,
+      );
 }

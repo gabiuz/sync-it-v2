@@ -17,6 +17,9 @@ class WorkbenchScreen extends StatefulWidget {
     required this.onClose,
     this.blendSources,
     this.initialBlendConfig,
+    this.stitchSources,
+    this.initialStitchParts,
+    this.initialStitchConfig,
     this.unitSystem = UnitSystem.metric,
     this.themeMode = ThemeMode.system,
     this.onUnitSystemChanged,
@@ -29,6 +32,9 @@ class WorkbenchScreen extends StatefulWidget {
   final VoidCallback onClose;
   final List<BlendSource>? blendSources;
   final BlendConfiguration? initialBlendConfig;
+  final List<StitchSource>? stitchSources;
+  final List<StitchedPartInfo>? initialStitchParts;
+  final StitchConfiguration? initialStitchConfig;
   final UnitSystem unitSystem;
   final ThemeMode themeMode;
   final ValueChanged<UnitSystem>? onUnitSystemChanged;
@@ -42,6 +48,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   int _selectedTab = 0;
   late ParseResult _activeResult;
   BlendConfiguration? _blendConfig;
+  List<StitchedPartInfo>? _stitchParts;
+  StitchConfiguration? _stitchConfig;
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   late TextEditingController _fileNameController;
@@ -63,6 +71,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     super.initState();
     _activeResult = widget.initialResult;
     _blendConfig = widget.initialBlendConfig;
+    _stitchParts = widget.initialStitchParts;
+    _stitchConfig = widget.initialStitchConfig;
     final activity = _activeResult.activity;
     _titleController = TextEditingController(text: activity.title);
     _descriptionController = TextEditingController(text: activity.description);
@@ -111,6 +121,30 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     });
   }
 
+  Future<void> _applyRecomputedResult(
+    ParseResult nextResult, {
+    bool syncSportType = false,
+    List<StitchedPartInfo>? nextStitchParts,
+  }) async {
+    final geometry = nextResult.activity.trackpoints.length <= 2000
+        ? CoreEngine.buildDisplayGeometry(nextResult.activity)
+        : await CoreEngine.buildDisplayGeometryInIsolate(nextResult.activity);
+    if (!mounted) return;
+    setState(() {
+      _activeResult = nextResult;
+      if (syncSportType) {
+        _sportType = nextResult.activity.sportType;
+      }
+      if (nextStitchParts != null) {
+        _stitchParts = nextStitchParts;
+      }
+      _displayGeometry = geometry;
+      if (!_hasCustomFileName) {
+        _fileNameController.text = _smartDefaultFileName;
+      }
+    });
+  }
+
   Future<void> _updateBlendConfig(BlendConfiguration nextConfig) async {
     final sources = widget.blendSources;
     if (sources == null) return;
@@ -120,18 +154,22 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       nextConfig,
     );
     if (!mounted) return;
-    final geometry = blended.activity.trackpoints.length <= 2000
-        ? CoreEngine.buildDisplayGeometry(blended.activity)
-        : await CoreEngine.buildDisplayGeometryInIsolate(blended.activity);
+    await _applyRecomputedResult(blended, syncSportType: true);
+  }
+
+  Future<void> _updateStitchConfig(StitchConfiguration nextConfig) async {
+    final sources = widget.stitchSources;
+    if (sources == null) return;
+    setState(() => _stitchConfig = nextConfig);
+    final stitched = await CoreEngine.stitchActivitiesInIsolate(
+      sources,
+      nextConfig,
+    );
     if (!mounted) return;
-    setState(() {
-      _activeResult = blended;
-      _sportType = blended.activity.sportType;
-      _displayGeometry = geometry;
-      if (!_hasCustomFileName) {
-        _fileNameController.text = _smartDefaultFileName;
-      }
-    });
+    await _applyRecomputedResult(
+      stitched.asParseResult,
+      nextStitchParts: stitched.parts,
+    );
   }
 
   void _onBaseTimelineChanged(String? newBaseId) {
@@ -450,6 +488,13 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                   onBaseTimelineChanged: _onBaseTimelineChanged,
                   onBlendChannelChanged: _onBlendChannelChanged,
                   onBlendMetadataChanged: _updateBlendConfig,
+                  stitchParts: _stitchParts,
+                  stitchConfig: _stitchConfig,
+                  onRemoveGapChanged: (removeGap) {
+                    final current = _stitchConfig;
+                    if (current == null) return;
+                    _updateStitchConfig(current.copyWith(removeGap: removeGap));
+                  },
                 ),
                 _ExportTab(
                   exportFormat: _exportFormat,
@@ -835,6 +880,76 @@ class _StravaTaxCard extends StatelessWidget {
   }
 }
 
+class _SequentialStitchingSection extends StatelessWidget {
+  const _SequentialStitchingSection({
+    required this.parts,
+    required this.config,
+    required this.unitSystem,
+    required this.onRemoveGapChanged,
+  });
+
+  final List<StitchedPartInfo> parts;
+  final StitchConfiguration config;
+  final UnitSystem unitSystem;
+  final ValueChanged<bool> onRemoveGapChanged;
+
+  static String _formatUtcTime(DateTime dt) {
+    final u = dt.toUtc();
+    final hh = u.hour.toString().padLeft(2, '0');
+    final mm = u.minute.toString().padLeft(2, '0');
+    final ss = u.second.toString().padLeft(2, '0');
+    return '$hh:$mm:$ss UTC';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Sequential Stitching',
+          style: theme.textTheme.titleSmall,
+        ),
+        const SizedBox(height: 8),
+        Card(
+          child: Column(
+            children: [
+              for (var i = 0; i < parts.length; i++) ...[
+                if (i > 0) const Divider(height: 1),
+                ListTile(
+                  key: Key('stitch-part-$i'),
+                  leading: CircleAvatar(
+                    radius: 14,
+                    child: Text('${i + 1}'),
+                  ),
+                  title: Text('Part ${i + 1}: ${parts[i].fileName}'),
+                  subtitle: Text(
+                    '${_formatUtcTime(parts[i].effectiveStartTime)} – ${_formatUtcTime(parts[i].effectiveEndTime)} • '
+                    '${formatDistance(parts[i].distanceMeters, units: unitSystem)} • '
+                    '${parts[i].keptTrackpointCount} pts'
+                    '${parts[i].trimmedHeadCount > 0 ? ' (trimmed ${parts[i].trimmedHeadCount})' : ''}',
+                  ),
+                ),
+              ],
+              const Divider(height: 1),
+              SwitchListTile(
+                key: const Key('stitch-remove-gap-switch'),
+                title: const Text('Remove gap'),
+                subtitle: const Text(
+                  'Shift subsequent parts flush against the preceding part for continuous elapsed time.',
+                ),
+                value: config.removeGap,
+                onChanged: onRemoveGapChanged,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ChannelBlendingSection extends StatelessWidget {
   const _ChannelBlendingSection({
     required this.sources,
@@ -1109,6 +1224,9 @@ class _EditTab extends StatelessWidget {
     this.onBaseTimelineChanged,
     this.onBlendChannelChanged,
     this.onBlendMetadataChanged,
+    this.stitchParts,
+    this.stitchConfig,
+    this.onRemoveGapChanged,
   });
 
   final TextEditingController titleController;
@@ -1128,6 +1246,9 @@ class _EditTab extends StatelessWidget {
   final ValueChanged<String?>? onBaseTimelineChanged;
   final void Function(Channel channel, String? sourceId)? onBlendChannelChanged;
   final ValueChanged<BlendConfiguration>? onBlendMetadataChanged;
+  final List<StitchedPartInfo>? stitchParts;
+  final StitchConfiguration? stitchConfig;
+  final ValueChanged<bool>? onRemoveGapChanged;
 
   bool _isChannelPresent(StrippableChannel channel) {
     switch (channel) {
@@ -1168,6 +1289,17 @@ class _EditTab extends StatelessWidget {
             onBaseTimelineChanged: onBaseTimelineChanged!,
             onChannelChanged: onBlendChannelChanged!,
             onMetadataChanged: onBlendMetadataChanged!,
+          ),
+          const SizedBox(height: 20),
+        ],
+        if (stitchParts != null &&
+            stitchParts!.length >= 2 &&
+            stitchConfig != null) ...[
+          _SequentialStitchingSection(
+            parts: stitchParts!,
+            config: stitchConfig!,
+            unitSystem: unitSystem,
+            onRemoveGapChanged: onRemoveGapChanged!,
           ),
           const SizedBox(height: 20),
         ],

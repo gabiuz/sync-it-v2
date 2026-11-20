@@ -75,6 +75,9 @@ class _SyncItShellState extends State<_SyncItShell> {
   String? _sourceFileName;
   List<BlendSource>? _blendSources;
   BlendConfiguration? _blendConfig;
+  List<StitchSource>? _stitchSources;
+  List<StitchedPartInfo>? _stitchParts;
+  StitchConfiguration? _stitchConfig;
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -117,6 +120,9 @@ class _SyncItShellState extends State<_SyncItShell> {
         _sourceFileName = picked.fileName;
         _blendSources = null;
         _blendConfig = null;
+        _stitchSources = null;
+        _stitchParts = null;
+        _stitchConfig = null;
         _isLoading = false;
       });
     } on ActivityParseException catch (e) {
@@ -134,7 +140,11 @@ class _SyncItShellState extends State<_SyncItShell> {
     }
   }
 
-  Future<void> _importBlendSources() async {
+  Future<List<({PickedSourceFile file, ParseResult parsed})>?>
+      _pickAndParseMultipleSources({
+    required String minCountError,
+    required String failureAction,
+  }) async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -144,27 +154,56 @@ class _SyncItShellState extends State<_SyncItShell> {
       final pickedList = await widget.platformIoPort.pickMultipleSourceFiles();
       if (pickedList.isEmpty) {
         if (mounted) setState(() => _isLoading = false);
-        return;
+        return null;
       }
       if (pickedList.length < 2) {
-        if (!mounted) return;
+        if (!mounted) return null;
         setState(() {
-          _errorMessage = 'Select 2 or more Source Files to blend channels.';
+          _errorMessage = minCountError;
           _isLoading = false;
         });
-        return;
+        return null;
       }
 
       final parsedList = await Future.wait(
         pickedList.map(_parsePickedFile),
       );
-      final sources = <BlendSource>[
+      return [
         for (var i = 0; i < pickedList.length; i++)
+          (file: pickedList[i], parsed: parsedList[i]),
+      ];
+    } on ActivityParseException catch (e) {
+      if (!mounted) return null;
+      setState(() {
+        _errorMessage = e.message;
+        _isLoading = false;
+      });
+      return null;
+    } catch (e) {
+      if (!mounted) return null;
+      setState(() {
+        _errorMessage = 'Failed to $failureAction Source Files: $e';
+        _isLoading = false;
+      });
+      return null;
+    }
+  }
+
+  Future<void> _importBlendSources() async {
+    final entries = await _pickAndParseMultipleSources(
+      minCountError: 'Select 2 or more Source Files to blend channels.',
+      failureAction: 'blend',
+    );
+    if (entries == null || !mounted) return;
+
+    try {
+      final sources = <BlendSource>[
+        for (var i = 0; i < entries.length; i++)
           BlendSource(
             id: 'source-$i',
-            fileName: pickedList[i].fileName,
-            activity: parsedList[i].activity,
-            diagnostics: parsedList[i].diagnostics,
+            fileName: entries[i].file.fileName,
+            activity: entries[i].parsed.activity,
+            diagnostics: entries[i].parsed.diagnostics,
           ),
       ];
       final config = CoreEngine.defaultBlendConfiguration(sources);
@@ -175,18 +214,57 @@ class _SyncItShellState extends State<_SyncItShell> {
         _sourceFileName = '${sources.length} Blended Files';
         _blendSources = sources;
         _blendConfig = config;
-        _isLoading = false;
-      });
-    } on ActivityParseException catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _errorMessage = e.message;
+        _stitchSources = null;
+        _stitchParts = null;
+        _stitchConfig = null;
         _isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _errorMessage = 'Failed to blend Source Files: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _importStitchSources() async {
+    final entries = await _pickAndParseMultipleSources(
+      minCountError: 'Select 2 or more Source Files to stitch parts.',
+      failureAction: 'stitch',
+    );
+    if (entries == null || !mounted) return;
+
+    try {
+      final sources = <StitchSource>[
+        for (var i = 0; i < entries.length; i++)
+          StitchSource(
+            id: 'part-$i',
+            fileName: entries[i].file.fileName,
+            activity: entries[i].parsed.activity,
+            diagnostics: entries[i].parsed.diagnostics,
+          ),
+      ];
+      const config = StitchConfiguration();
+      final stitched = await CoreEngine.stitchActivitiesInIsolate(
+        sources,
+        config,
+      );
+      if (!mounted) return;
+      setState(() {
+        _parseResult = stitched.asParseResult;
+        _sourceFileName = '${stitched.parts.length} Stitched Parts';
+        _blendSources = null;
+        _blendConfig = null;
+        _stitchSources = sources;
+        _stitchParts = stitched.parts;
+        _stitchConfig = config;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = 'Failed to stitch Source Files: $e';
         _isLoading = false;
       });
     }
@@ -215,6 +293,7 @@ class _SyncItShellState extends State<_SyncItShell> {
       return StartScreen(
         onImportTap: _importSourceFile,
         onBlendTap: _importBlendSources,
+        onStitchTap: _importStitchSources,
         isLoading: _isLoading,
         errorMessage: _errorMessage,
       );
@@ -225,6 +304,9 @@ class _SyncItShellState extends State<_SyncItShell> {
       sourceFileName: _sourceFileName ?? 'activity.gpx',
       blendSources: _blendSources,
       initialBlendConfig: _blendConfig,
+      stitchSources: _stitchSources,
+      initialStitchParts: _stitchParts,
+      initialStitchConfig: _stitchConfig,
       platformIoPort: widget.platformIoPort,
       unitSystem: widget.unitSystem,
       themeMode: widget.themeMode,
@@ -235,6 +317,9 @@ class _SyncItShellState extends State<_SyncItShell> {
         _sourceFileName = null;
         _blendSources = null;
         _blendConfig = null;
+        _stitchSources = null;
+        _stitchParts = null;
+        _stitchConfig = null;
         _errorMessage = null;
       }),
     );
