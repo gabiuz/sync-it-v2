@@ -6,6 +6,7 @@ import 'display_geometry.dart';
 import 'fit_codec.dart';
 import 'gpx_codec.dart';
 import 'models.dart';
+import 'sequential_stitcher.dart';
 import 'summary_calculator.dart';
 import 'tcx_codec.dart';
 
@@ -178,5 +179,23 @@ class CoreEngine {
     BlendConfiguration config,
   ) {
     return Isolate.run(() => blendActivities(sources, config));
+  }
+
+  /// Concatenates 2 or more [sources] chronologically into one continuous
+  /// [Activity] with continuous cumulative distance, Channel unions, Lap
+  /// boundaries, optional gap removal, and overlap head-trimming.
+  static StitchResult stitchActivities(
+    List<StitchSource> sources, [
+    StitchConfiguration config = const StitchConfiguration(),
+  ]) {
+    return SequentialStitcher.stitch(sources, config);
+  }
+
+  /// Runs [stitchActivities] in a background Dart isolate.
+  static Future<StitchResult> stitchActivitiesInIsolate(
+    List<StitchSource> sources, [
+    StitchConfiguration config = const StitchConfiguration(),
+  ]) {
+    return Isolate.run(() => stitchActivities(sources, config));
   }
 }

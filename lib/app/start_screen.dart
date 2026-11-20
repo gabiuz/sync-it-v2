@@ -5,12 +5,14 @@ class StartScreen extends StatelessWidget {
     super.key,
     required this.onImportTap,
     this.onBlendTap,
+    this.onStitchTap,
     this.isLoading = false,
     this.errorMessage,
   });
 
   final VoidCallback onImportTap;
   final VoidCallback? onBlendTap;
+  final VoidCallback? onStitchTap;
   final bool isLoading;
   final String? errorMessage;
 
@@ -22,11 +24,12 @@ class StartScreen extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 460),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -75,6 +78,15 @@ class StartScreen extends StatelessWidget {
                       onPressed: isLoading ? null : onBlendTap,
                       icon: const Icon(Icons.layers_outlined),
                       label: const Text('Blend Channels (2+ Files)'),
+                    ),
+                  ],
+                  if (onStitchTap != null) ...[
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      key: const Key('stitch-parts-button'),
+                      onPressed: isLoading ? null : onStitchTap,
+                      icon: const Icon(Icons.timeline),
+                      label: const Text('Stitch Parts (2+ Files)'),
                     ),
                   ],
                   if (errorMessage != null) ...[
