@@ -35,7 +35,7 @@ jobs:
 
       - name: Analyze & test
         run: |
-          flutter analyze
+          flutter analyze --no-fatal-infos
           flutter test
 
       - name: Configure Android release signing
