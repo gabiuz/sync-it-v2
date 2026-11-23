@@ -1,0 +1,90 @@
+name: Build Android APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze & test
+        run: |
+          flutter analyze
+          flutter test
+
+      - name: Configure Android release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "${{ runner.temp }}/upload-keystore.jks"
+            printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=%s\n' \
+              "$ANDROID_KEYSTORE_PASSWORD" \
+              "$ANDROID_KEY_PASSWORD" \
+              "$ANDROID_KEY_ALIAS" \
+              "${{ runner.temp }}/upload-keystore.jks" > android/key.properties
+            echo "Release signing configured from GitHub Secrets."
+          else
+            if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+              echo "::error::ANDROID_KEYSTORE_BASE64 secret is not set. Configure signing secrets before tagging a release."
+              exit 1
+            fi
+            echo "::warning::Signing secrets not set; falling back to debug signing for manual workflow run."
+          fi
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Name APK artifact
+        id: artifact
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="dev-${GITHUB_SHA::7}"
+          fi
+          APK_NAME="Sync-It-${VERSION}.apk"
+          cp build/app/outputs/flutter-apk/app-release.apk "${APK_NAME}"
+          echo "apk_name=${APK_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.apk_name }}
+          path: ${{ steps.artifact.outputs.apk_name }}
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.artifact.outputs.apk_name }}
+          generate_release_notes: true
