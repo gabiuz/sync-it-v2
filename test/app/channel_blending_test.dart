@@ -3,9 +3,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sync_it/app/sync_it_app.dart';
-import 'package:sync_it/core/core_engine.dart';
-import 'package:sync_it/port/platform_io_port.dart';
+import 'package:gpx_lab/app/gpx_lab_app.dart';
+import 'package:gpx_lab/core/core_engine.dart';
+import 'package:gpx_lab/port/platform_io_port.dart';
 
 class _BlendFakePort implements PlatformIoPort {
   _BlendFakePort({this.pickedFiles = const []});
@@ -132,7 +132,7 @@ void main() {
         ],
       );
 
-      await tester.pumpWidget(SyncItApp(platformIoPort: fakePort));
+      await tester.pumpWidget(GpxLabApp(platformIoPort: fakePort));
 
       // Selecting only 1 file shows an error
       await tester.tap(find.byKey(const Key('blend-channels-button')));

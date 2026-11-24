@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/core_engine.dart';
 import 'activity_formatters.dart';
+import 'gpx_lab_theme.dart';
 
 /// Displays interactive Channel charts for Heart Rate, Elevation, and Pace,
 /// and cleanly marks unavailable Channels.
@@ -19,6 +20,7 @@ class ChannelChartsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final brandColors = GpxLabBrandColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -27,7 +29,7 @@ class ChannelChartsSection extends StatelessWidget {
           unavailableKey: const Key('chart-heart-rate-unavailable'),
           title: 'Heart Rate',
           icon: Icons.favorite_outline,
-          accentColor: Colors.redAccent,
+          accentColor: brandColors.heartRate,
           samples: geometry.heartRateSeries,
           unitSystem: unitSystem,
           formatValue: (v) => '${v.round()} bpm',
@@ -38,7 +40,7 @@ class ChannelChartsSection extends StatelessWidget {
           unavailableKey: const Key('chart-elevation-unavailable'),
           title: 'Elevation',
           icon: Icons.terrain_outlined,
-          accentColor: Colors.teal,
+          accentColor: brandColors.elevation,
           samples: geometry.elevationSeries,
           unitSystem: unitSystem,
           formatValue: (v) => formatElevation(v, units: unitSystem),
@@ -49,7 +51,7 @@ class ChannelChartsSection extends StatelessWidget {
           unavailableKey: const Key('chart-pace-unavailable'),
           title: 'Pace',
           icon: Icons.speed_outlined,
-          accentColor: Colors.indigo,
+          accentColor: brandColors.pace,
           samples: geometry.paceSeries,
           unitSystem: unitSystem,
           invertY: true,
@@ -221,6 +223,7 @@ class _InteractiveChannelChartCardState
                         minVal: minVal,
                         maxVal: maxVal,
                         lineColor: widget.accentColor,
+                        haloColor: GpxLabBrandColors.of(context).markerHalo,
                         gridColor:
                             colors.outlineVariant.withValues(alpha: 0.45),
                         scrubIndex: _scrubIndex,
@@ -262,6 +265,7 @@ class _ChannelLinePainter extends CustomPainter {
     required this.minVal,
     required this.maxVal,
     required this.lineColor,
+    required this.haloColor,
     required this.gridColor,
     required this.scrubIndex,
     required this.invertY,
@@ -271,6 +275,7 @@ class _ChannelLinePainter extends CustomPainter {
   final double minVal;
   final double maxVal;
   final Color lineColor;
+  final Color haloColor;
   final Color gridColor;
   final int? scrubIndex;
   final bool invertY;
@@ -347,7 +352,7 @@ class _ChannelLinePainter extends CustomPainter {
         Offset(pt.dx, size.height),
         cursorPaint,
       );
-      canvas.drawCircle(pt, 5, Paint()..color = Colors.white);
+      canvas.drawCircle(pt, 5, Paint()..color = haloColor);
       canvas.drawCircle(pt, 3.5, Paint()..color = lineColor);
     }
   }
@@ -356,6 +361,7 @@ class _ChannelLinePainter extends CustomPainter {
   bool shouldRepaint(covariant _ChannelLinePainter oldDelegate) {
     return oldDelegate.samples != samples ||
         oldDelegate.scrubIndex != scrubIndex ||
-        oldDelegate.lineColor != lineColor;
+        oldDelegate.lineColor != lineColor ||
+        oldDelegate.haloColor != haloColor;
   }
 }

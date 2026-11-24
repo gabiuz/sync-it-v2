@@ -13,10 +13,10 @@ class DevicePlatformIoPort implements PlatformIoPort {
   const DevicePlatformIoPort();
 
   static const MethodChannel _incomingMethodChannel = MethodChannel(
-    'com.gabiuz.sync_it/incoming_files',
+    'com.gabiuz.gpx_lab/incoming_files',
   );
   static const EventChannel _incomingEventChannel = EventChannel(
-    'com.gabiuz.sync_it/incoming_files_events',
+    'com.gabiuz.gpx_lab/incoming_files_events',
   );
 
   @override

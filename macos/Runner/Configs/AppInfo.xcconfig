@@ -5,10 +5,10 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = sync_it
+PRODUCT_NAME = GPX Lab
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.gabiuz.syncIt
+PRODUCT_BUNDLE_IDENTIFIER = com.gabiuz.gpxlab
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 com.gabiuz. All rights reserved.

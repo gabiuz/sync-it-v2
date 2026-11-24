@@ -14,7 +14,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.gabiuz.sync_it"
+    namespace = "com.gabiuz.gpx_lab"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -24,8 +24,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.gabiuz.syncit"
+        applicationId = "com.gabiuz.gpxlab"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

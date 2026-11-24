@@ -6,9 +6,9 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sync_it/app/sync_it_app.dart';
-import 'package:sync_it/core/core_engine.dart';
-import 'package:sync_it/port/platform_io_port.dart';
+import 'package:gpx_lab/app/gpx_lab_app.dart';
+import 'package:gpx_lab/core/core_engine.dart';
+import 'package:gpx_lab/port/platform_io_port.dart';
 
 // 1x1 transparent PNG bytes.
 final _transparentPng = Uint8List.fromList(const [
@@ -290,13 +290,25 @@ void main() {
           online: true,
         );
 
-        await tester.pumpWidget(SyncItApp(platformIoPort: port));
+        await tester.pumpWidget(GpxLabApp(platformIoPort: port));
         await tester.tap(find.byKey(const Key('import-source-button')));
         await _pumpUntilSettledAsync(tester);
 
         expect(find.byType(FlutterMap), findsOneWidget);
         expect(find.byKey(const Key('osm-route-map')), findsOneWidget);
         expect(find.byKey(const Key('offline-route-canvas')), findsNothing);
+        expect(
+          tester.widget<TileLayer>(find.byType(TileLayer)).userAgentPackageName,
+          'com.gabiuz.gpxlab',
+        );
+        expect(
+          tester
+              .widget<PolylineLayer>(find.byType(PolylineLayer))
+              .polylines
+              .single
+              .color,
+          const Color(0xFF1D63ED),
+        );
 
         // Scroll down from the title card (above the interactive map) to verify
         // charts, scrubbing, and lap breakdown table.
@@ -332,7 +344,7 @@ void main() {
         online: true,
       );
 
-      await tester.pumpWidget(SyncItApp(platformIoPort: port));
+      await tester.pumpWidget(GpxLabApp(platformIoPort: port));
       await tester.tap(find.byKey(const Key('import-source-button')));
       await _pumpUntilSettledAsync(tester);
       for (var i = 0; i < 10; i++) {
@@ -358,7 +370,7 @@ void main() {
         online: false,
       );
 
-      await tester.pumpWidget(SyncItApp(platformIoPort: port));
+      await tester.pumpWidget(GpxLabApp(platformIoPort: port));
       await tester.tap(find.byKey(const Key('import-source-button')));
       await _pumpUntilSettledAsync(tester);
       for (var i = 0; i < 10; i++) {
@@ -385,7 +397,7 @@ void main() {
         online: true,
       );
 
-      await tester.pumpWidget(SyncItApp(platformIoPort: port));
+      await tester.pumpWidget(GpxLabApp(platformIoPort: port));
       await tester.tap(find.byKey(const Key('import-source-button')));
       await _pumpUntilSettledAsync(tester);
 

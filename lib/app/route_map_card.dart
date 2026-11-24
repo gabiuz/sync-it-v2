@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' show LatLng;
 
 import '../core/core_engine.dart';
+import 'gpx_lab_theme.dart';
 
 /// Displays an interactive OpenStreetMap route map when online, an interactive
 /// vector-canvas polyline fallback when offline or when tile loading fails, or
@@ -105,6 +106,7 @@ class _RouteMapCardState extends State<RouteMapCard> {
   }
 
   Widget _buildOnlineMap(BuildContext context, ColorScheme colors) {
+    final brandColors = GpxLabBrandColors.of(context);
     final latLngs = [
       for (final pt in widget.routePoints) LatLng(pt.latitude, pt.longitude),
     ];
@@ -133,7 +135,7 @@ class _RouteMapCardState extends State<RouteMapCard> {
           children: [
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'com.syncit.app',
+              userAgentPackageName: GpxLabTheme.osmUserAgentPackage,
               tileProvider: NetworkTileProvider(
                 cachingProvider: const DisabledMapCachingProvider(),
               ),
@@ -144,15 +146,23 @@ class _RouteMapCardState extends State<RouteMapCard> {
                 Polyline(
                   points: latLngs,
                   strokeWidth: 4.0,
-                  color: colors.primary,
+                  color: brandColors.routeLine,
                 ),
               ],
             ),
             MarkerLayer(
               markers: [
-                _endpointMarker(latLngs.first, Colors.green),
+                _endpointMarker(
+                  latLngs.first,
+                  brandColors.routeStart,
+                  brandColors.markerHalo,
+                ),
                 if (latLngs.length > 1)
-                  _endpointMarker(latLngs.last, colors.error),
+                  _endpointMarker(
+                    latLngs.last,
+                    brandColors.routeEnd,
+                    brandColors.markerHalo,
+                  ),
               ],
             ),
           ],
@@ -176,7 +186,7 @@ class _RouteMapCardState extends State<RouteMapCard> {
     );
   }
 
-  Marker _endpointMarker(LatLng point, Color color) {
+  Marker _endpointMarker(LatLng point, Color color, Color haloColor) {
     return Marker(
       point: point,
       width: 14,
@@ -185,13 +195,14 @@ class _RouteMapCardState extends State<RouteMapCard> {
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2),
+          border: Border.all(color: haloColor, width: 2),
         ),
       ),
     );
   }
 
   Widget _buildOfflineCanvas(BuildContext context, ColorScheme colors) {
+    final brandColors = GpxLabBrandColors.of(context);
     return Stack(
       children: [
         Container(
@@ -205,10 +216,11 @@ class _RouteMapCardState extends State<RouteMapCard> {
               key: const Key('offline-route-canvas'),
               painter: _OfflineRoutePainter(
                 points: widget.routePoints,
-                lineColor: colors.primary,
+                lineColor: brandColors.routeLine,
                 gridColor: colors.outlineVariant.withValues(alpha: 0.45),
-                startColor: Colors.green,
-                endColor: colors.error,
+                startColor: brandColors.routeStart,
+                endColor: brandColors.routeEnd,
+                haloColor: brandColors.markerHalo,
               ),
               size: Size.infinite,
             ),
@@ -248,6 +260,7 @@ class _OfflineRoutePainter extends CustomPainter {
     required this.gridColor,
     required this.startColor,
     required this.endColor,
+    required this.haloColor,
   });
 
   final List<GeoPoint> points;
@@ -255,6 +268,7 @@ class _OfflineRoutePainter extends CustomPainter {
   final Color gridColor;
   final Color startColor;
   final Color endColor;
+  final Color haloColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -335,12 +349,16 @@ class _OfflineRoutePainter extends CustomPainter {
   }
 
   void _drawEndpoint(Canvas canvas, Offset center, Color color) {
-    canvas.drawCircle(center, 6, Paint()..color = Colors.white);
+    canvas.drawCircle(center, 6, Paint()..color = haloColor);
     canvas.drawCircle(center, 4.5, Paint()..color = color);
   }
 
   @override
   bool shouldRepaint(covariant _OfflineRoutePainter oldDelegate) {
-    return oldDelegate.points != points || oldDelegate.lineColor != lineColor;
+    return oldDelegate.points != points ||
+        oldDelegate.lineColor != lineColor ||
+        oldDelegate.startColor != startColor ||
+        oldDelegate.endColor != endColor ||
+        oldDelegate.haloColor != haloColor;
   }
 }

@@ -4,8 +4,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sync_it/app/sync_it_app.dart';
-import 'package:sync_it/port/platform_io_port.dart';
+import 'package:gpx_lab/app/gpx_lab_app.dart';
+import 'package:gpx_lab/port/platform_io_port.dart';
 
 class _IntentFakePort implements PlatformIoPort {
   _IntentFakePort({this.initialBatch});
@@ -150,7 +150,7 @@ void main() {
       );
       addTearDown(port.dispose);
 
-      await tester.pumpWidget(SyncItApp(platformIoPort: port));
+      await tester.pumpWidget(GpxLabApp(platformIoPort: port));
       await _settleIsolateWork(tester);
 
       expect(find.byKey(const Key('import-source-button')), findsNothing);
@@ -176,7 +176,7 @@ void main() {
       );
       addTearDown(port.dispose);
 
-      await tester.pumpWidget(SyncItApp(platformIoPort: port));
+      await tester.pumpWidget(GpxLabApp(platformIoPort: port));
       await _settleIsolateWork(tester);
       expect(find.text('Morning Canal Run'), findsWidgets);
 
@@ -203,7 +203,7 @@ void main() {
       final port = _IntentFakePort();
       addTearDown(port.dispose);
 
-      await tester.pumpWidget(SyncItApp(platformIoPort: port));
+      await tester.pumpWidget(GpxLabApp(platformIoPort: port));
       await tester.pumpAndSettle();
 
       port.emitIncoming(
@@ -246,7 +246,7 @@ void main() {
       final port = _IntentFakePort();
       addTearDown(port.dispose);
 
-      await tester.pumpWidget(SyncItApp(platformIoPort: port));
+      await tester.pumpWidget(GpxLabApp(platformIoPort: port));
       await tester.pumpAndSettle();
 
       port.emitIncoming(
@@ -298,7 +298,7 @@ void main() {
       );
       addTearDown(port.dispose);
 
-      await tester.pumpWidget(SyncItApp(platformIoPort: port));
+      await tester.pumpWidget(GpxLabApp(platformIoPort: port));
       await _settleIsolateWork(tester);
       expect(find.text('Morning Canal Run'), findsWidgets);
 
@@ -316,6 +316,10 @@ void main() {
 
       expect(find.byKey(const Key('import-source-button')), findsOneWidget);
       expect(find.textContaining('Unsupported file type'), findsOneWidget);
+      expect(
+        find.textContaining('GPX Lab only supports .gpx, .tcx, and .fit files.'),
+        findsOneWidget,
+      );
 
       port.emitIncoming(
         const IncomingSourceBatch(

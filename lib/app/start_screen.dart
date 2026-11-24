@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'gpx_lab_brand_header.dart';
+
 class StartScreen extends StatelessWidget {
   const StartScreen({
     super.key,
@@ -33,27 +35,7 @@ class StartScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Icon(
-                    Icons.route_rounded,
-                    size: 64,
-                    color: colors.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Sync-It',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Offline activity file workbench. Inspect, edit, and export clean FIT, TCX, or GPX files before uploading.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colors.onSurfaceVariant,
-                    ),
-                  ),
+                  const GpxLabBrandHeader(),
                   const SizedBox(height: 32),
                   FilledButton.icon(
                     key: const Key('import-source-button'),

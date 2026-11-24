@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sync_it/core/core_engine.dart';
+import 'package:gpx_lab/core/core_engine.dart';
 
 Uint8List _utf8(String s) => Uint8List.fromList(utf8.encode(s));
 

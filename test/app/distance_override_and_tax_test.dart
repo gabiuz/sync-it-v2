@@ -3,9 +3,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sync_it/app/sync_it_app.dart';
-import 'package:sync_it/core/core_engine.dart';
-import 'package:sync_it/port/platform_io_port.dart';
+import 'package:gpx_lab/app/gpx_lab_app.dart';
+import 'package:gpx_lab/core/core_engine.dart';
+import 'package:gpx_lab/port/platform_io_port.dart';
 
 class _InMemoryPlatformIoPort implements PlatformIoPort {
   _InMemoryPlatformIoPort({this.nextPickedFile});
@@ -91,7 +91,7 @@ Future<void> _importTcx(
   WidgetTester tester,
   _InMemoryPlatformIoPort port,
 ) async {
-  await tester.pumpWidget(SyncItApp(platformIoPort: port));
+  await tester.pumpWidget(GpxLabApp(platformIoPort: port));
   await tester.tap(find.byKey(const Key('import-source-button')));
   await tester.pump();
   await tester.runAsync(

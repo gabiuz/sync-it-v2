@@ -1,4 +1,4 @@
-# Sync-It
+# GPX Lab
 
 A mobile workbench for inspecting, combining, editing, and exporting fitness activity files before uploading them to platforms like Strava.
 

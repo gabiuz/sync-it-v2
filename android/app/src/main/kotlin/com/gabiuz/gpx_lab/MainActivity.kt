@@ -1,4 +1,4 @@
-package com.gabiuz.sync_it
+package com.gabiuz.gpx_lab
 
 import android.content.Intent
 import android.net.Uri
@@ -12,8 +12,8 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     companion object {
-        private const val METHOD_CHANNEL = "com.gabiuz.sync_it/incoming_files"
-        private const val EVENT_CHANNEL = "com.gabiuz.sync_it/incoming_files_events"
+        private const val METHOD_CHANNEL = "com.gabiuz.gpx_lab/incoming_files"
+        private const val EVENT_CHANNEL = "com.gabiuz.gpx_lab/incoming_files_events"
         private val SUPPORTED_EXTENSIONS = setOf("gpx", "tcx", "fit")
     }
 
@@ -76,7 +76,7 @@ class MainActivity : FlutterActivity() {
             val ext = fileName.substringAfterLast('.', "").lowercase()
             if (ext.isNotEmpty() && ext !in SUPPORTED_EXTENSIONS) {
                 errors.add(
-                    "Unsupported file type \"$fileName\". Sync-It only supports .gpx, .tcx, and .fit files."
+                    "Unsupported file type \"$fileName\". GPX Lab only supports .gpx, .tcx, and .fit files."
                 )
                 continue
             }

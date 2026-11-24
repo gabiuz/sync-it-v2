@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sync_it/core/core_engine.dart';
+import 'package:gpx_lab/core/core_engine.dart';
 
 Uint8List _utf8(String s) => Uint8List.fromList(utf8.encode(s));
 
@@ -356,7 +356,7 @@ void main() {
 
     test('GPX -> TCX conversion synthesizes monotonic cumulative distance from 2D Haversine', () async {
       const sampleGpx = '''<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Sync-It Test"
+<gpx version="1.1" creator="GPX Lab Test"
   xmlns="http://www.topografix.com/GPX/1/1"
   xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
   <trk>
