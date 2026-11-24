@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sync_it/core/core_engine.dart';
+import 'package:gpx_lab/core/core_engine.dart';
 
 void main() {
   group('CoreEngine Channel Stripping Seam', () {

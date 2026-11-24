@@ -854,7 +854,7 @@ class FitCodec {
         updatedActivity.deviceInfo != null &&
         updatedActivity.deviceInfo!.trim().isNotEmpty;
     final deviceNameBytes = _encodeFixedString(
-      updatedActivity.deviceInfo ?? 'Sync-It',
+      updatedActivity.deviceInfo ?? 'GPX Lab',
       32,
     );
     final sportNameBytes = _encodeFixedString(updatedActivity.title, 32);

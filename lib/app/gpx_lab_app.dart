@@ -7,11 +7,12 @@ import '../core/core_engine.dart';
 import '../port/device_platform_io_port.dart';
 import '../port/platform_io_port.dart';
 import 'activity_formatters.dart';
+import 'gpx_lab_theme.dart';
 import 'start_screen.dart';
 import 'workbench_screen.dart';
 
-class SyncItApp extends StatefulWidget {
-  const SyncItApp({
+class GpxLabApp extends StatefulWidget {
+  const GpxLabApp({
     super.key,
     this.platformIoPort,
   });
@@ -19,29 +20,21 @@ class SyncItApp extends StatefulWidget {
   final PlatformIoPort? platformIoPort;
 
   @override
-  State<SyncItApp> createState() => _SyncItAppState();
+  State<GpxLabApp> createState() => _GpxLabAppState();
 }
 
-class _SyncItAppState extends State<SyncItApp> {
+class _GpxLabAppState extends State<GpxLabApp> {
   UnitSystem _unitSystem = UnitSystem.metric;
   ThemeMode _themeMode = ThemeMode.system;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Sync-It',
+      title: GpxLabTheme.appName,
       themeMode: _themeMode,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.deepOrange,
-        brightness: Brightness.light,
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.deepOrange,
-        brightness: Brightness.dark,
-      ),
-      home: _SyncItShell(
+      theme: GpxLabTheme.light(),
+      darkTheme: GpxLabTheme.dark(),
+      home: _GpxLabShell(
         platformIoPort: widget.platformIoPort ?? const DevicePlatformIoPort(),
         unitSystem: _unitSystem,
         themeMode: _themeMode,
@@ -52,8 +45,8 @@ class _SyncItAppState extends State<SyncItApp> {
   }
 }
 
-class _SyncItShell extends StatefulWidget {
-  const _SyncItShell({
+class _GpxLabShell extends StatefulWidget {
+  const _GpxLabShell({
     required this.platformIoPort,
     required this.unitSystem,
     required this.themeMode,
@@ -68,10 +61,10 @@ class _SyncItShell extends StatefulWidget {
   final ValueChanged<ThemeMode> onThemeModeChanged;
 
   @override
-  State<_SyncItShell> createState() => _SyncItShellState();
+  State<_GpxLabShell> createState() => _GpxLabShellState();
 }
 
-class _SyncItShellState extends State<_SyncItShell> {
+class _GpxLabShellState extends State<_GpxLabShell> {
   ParseResult? _parseResult;
   String? _sourceFileName;
   List<BlendSource>? _blendSources;
@@ -92,7 +85,7 @@ class _SyncItShellState extends State<_SyncItShell> {
   }
 
   @override
-  void didUpdateWidget(covariant _SyncItShell oldWidget) {
+  void didUpdateWidget(covariant _GpxLabShell oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.platformIoPort != widget.platformIoPort) {
       _incomingSub?.cancel();
@@ -135,7 +128,7 @@ class _SyncItShellState extends State<_SyncItShell> {
       if (ext != '.gpx' && ext != '.tcx' && ext != '.fit') {
         throw ActivityParseException(
           'Unsupported file type "${picked.fileName}". '
-          'Sync-It only supports .gpx, .tcx, and .fit files.',
+          'GPX Lab only supports .gpx, .tcx, and .fit files.',
         );
       }
     }

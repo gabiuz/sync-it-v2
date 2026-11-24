@@ -121,7 +121,7 @@ class GpxCodec {
     if (rawPoints.isEmpty) {
       if (missingTimestampCount > 0) {
         throw const ActivityParseException(
-          'This GPX file has trackpoints without <time> timestamps (likely a planned route). Sync-It requires timestamped trackpoints.',
+          'This GPX file has trackpoints without <time> timestamps (likely a planned route). GPX Lab requires timestamped trackpoints.',
         );
       }
       throw const ActivityParseException(
@@ -278,7 +278,7 @@ class GpxCodec {
       'gpx',
       attributes: {
         'version': '1.1',
-        'creator': 'Sync-It',
+        'creator': 'GPX Lab',
         'xmlns': _gpxNamespace,
         'xmlns:gpxtpx': _tpxNamespace,
       },

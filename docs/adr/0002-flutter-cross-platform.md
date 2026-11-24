@@ -1,6 +1,6 @@
 # Flutter (Dart) for Cross-Platform Mobile
 
-We are building Sync-It with Flutter (Dart) to target both Android and iOS from a single codebase. Flutter avoids JS-bridge serialization overhead when parsing, blending, charting, and encoding multi-thousand-trackpoint XML and binary FIT files, and provides pure-Dart binary FIT read/write library support.
+We are building GPX Lab with Flutter (Dart) to target both Android and iOS from a single codebase. Flutter avoids JS-bridge serialization overhead when parsing, blending, charting, and encoding multi-thousand-trackpoint XML and binary FIT files, and provides pure-Dart binary FIT read/write library support.
 
 ## Considered Options
 

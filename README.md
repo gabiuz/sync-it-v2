@@ -1,17 +1,18 @@
-# sync_it
+# GPX Lab
 
-A new Flutter project.
+Offline mobile workbench for inspecting, combining, editing, and exporting fitness activity files (`GPX`, `TCX`, and `FIT`) before uploading them to platforms like Strava.
 
-## Getting Started
+## Highlights
 
-This project is a starting point for a Flutter application.
+- **100% Offline & Private**: Parses, blends, stitches, and exports **Source Files** locally on-device with zero backend or account setup.
+- **Channel Blending & Sequential Stitching**: Align overlapping sensor **Channels** onto a **Base Timeline** or concatenate back-to-back parts into a single continuous **Activity**.
+- **Strava Tax Diagnostics & Distance Override**: Detect downward distance discrepancies and proportionally scale cumulative distance before exporting.
+- **Privacy & Channel Stripping**: Selectively strip GPS position, heart rate, cadence, power, elevation, or device info with lossy-export safety rails.
 
-A few resources to get you started if this is your first Flutter project:
+## Development
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter pub get
+flutter analyze --no-fatal-infos
+flutter test
+```

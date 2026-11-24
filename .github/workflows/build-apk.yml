@@ -72,7 +72,7 @@ jobs:
           else
             VERSION="dev-${GITHUB_SHA::7}"
           fi
-          APK_NAME="Sync-It-${VERSION}.apk"
+          APK_NAME="GPX-Lab-${VERSION}.apk"
           cp build/app/outputs/flutter-apk/app-release.apk "${APK_NAME}"
           echo "apk_name=${APK_NAME}" >> "$GITHUB_OUTPUT"
 

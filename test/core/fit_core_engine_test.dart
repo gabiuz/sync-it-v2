@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sync_it/core/core_engine.dart';
+import 'package:gpx_lab/core/core_engine.dart';
 
 void main() {
   group('CoreEngine FIT Seam', () {
@@ -193,7 +193,7 @@ void main() {
 
     test('converts GPX Source File to valid FIT Export File with matching totals and terminal distance', () async {
       const sampleGpx = '''<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Sync-It Test"
+<gpx version="1.1" creator="GPX Lab Test"
   xmlns="http://www.topografix.com/GPX/1/1"
   xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
   <metadata>

@@ -1,6 +1,6 @@
 # Canonical Activity Model with Clean Re-Serialization
 
-Sync-It parses every imported GPX, TCX, and FIT file into a single format-independent `Activity` model and serializes fresh output files on export, rather than patching original XML DOMs or binary FIT streams in place. This makes cross-format conversion, channel blending, sequential stitching, and channel stripping uniform and predictable across all three formats.
+GPX Lab parses every imported GPX, TCX, and FIT file into a single format-independent `Activity` model and serializes fresh output files on export, rather than patching original XML DOMs or binary FIT streams in place. This makes cross-format conversion, channel blending, sequential stitching, and channel stripping uniform and predictable across all three formats.
 
 ## Considered Options
 

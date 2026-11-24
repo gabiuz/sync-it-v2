@@ -1,11 +1,11 @@
 {
-    "name": "sync_it",
-    "short_name": "sync_it",
+    "name": "GPX Lab",
+    "short_name": "GPX Lab",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F8FAFC",
+    "theme_color": "#1D63ED",
+    "description": "GPX Lab — offline fitness activity file workbench.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

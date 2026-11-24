@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'app/sync_it_app.dart';
+import 'app/gpx_lab_app.dart';
 
 void main() {
-  runApp(const SyncItApp());
+  runApp(const GpxLabApp());
 }

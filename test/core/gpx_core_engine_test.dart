@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sync_it/core/core_engine.dart';
+import 'package:gpx_lab/core/core_engine.dart';
 
 Uint8List _utf8(String s) => Uint8List.fromList(utf8.encode(s));
 
@@ -10,7 +10,7 @@ void main() {
   group('CoreEngine GPX Seam', () {
     test('parses valid GPX, applies metadata edits, and preserves round-trip fidelity', () async {
       const sampleGpx = '''<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="Sync-It Test"
+<gpx version="1.1" creator="GPX Lab Test"
   xmlns="http://www.topografix.com/GPX/1/1"
   xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1">
   <metadata>
@@ -89,6 +89,7 @@ void main() {
           sportType: SportType.hiking,
         ),
       );
+      expect(utf8.decode(exported.bytes), contains('creator="GPX Lab"'));
 
       final reparsed = CoreEngine.parseGpx(exported.bytes);
       expect(reparsed.diagnostics, isEmpty);
@@ -211,7 +212,10 @@ void main() {
           isA<ActivityParseException>().having(
             (e) => e.message,
             'message',
-            contains('without <time> timestamps'),
+            allOf(
+              contains('without <time> timestamps'),
+              contains('GPX Lab requires timestamped trackpoints.'),
+            ),
           ),
         ),
       );

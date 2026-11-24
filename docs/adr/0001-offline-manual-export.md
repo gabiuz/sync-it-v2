@@ -1,6 +1,6 @@
 # Offline-Only Manual File Export (No Strava API Integration)
 
-Sync-It exports edited GPX, TCX, and FIT files locally for manual upload rather than integrating with the Strava Uploads API. This keeps the app 100% offline with zero backend, OAuth setup, API policy risk, or platform lock-in, and works with any destination platform.
+GPX Lab exports edited GPX, TCX, and FIT files locally for manual upload rather than integrating with the Strava Uploads API. This keeps the app 100% offline with zero backend, OAuth setup, API policy risk, or platform lock-in, and works with any destination platform.
 
 ## Consequences
 

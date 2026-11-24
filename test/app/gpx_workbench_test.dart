@@ -3,9 +3,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sync_it/app/sync_it_app.dart';
-import 'package:sync_it/core/core_engine.dart';
-import 'package:sync_it/port/platform_io_port.dart';
+import 'package:gpx_lab/app/gpx_lab_app.dart';
+import 'package:gpx_lab/core/core_engine.dart';
+import 'package:gpx_lab/port/platform_io_port.dart';
 
 class FakePlatformIoPort implements PlatformIoPort {
   FakePlatformIoPort({this.nextPickedFile});
@@ -99,10 +99,10 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(SyncItApp(platformIoPort: fakePort));
+    await tester.pumpWidget(GpxLabApp(platformIoPort: fakePort));
 
     // Start screen
-    expect(find.text('Sync-It'), findsOneWidget);
+    expect(find.text('GPX Lab'), findsOneWidget);
     await tester.tap(find.byKey(const Key('import-source-button')));
     await tester.pump();
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
@@ -168,7 +168,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(SyncItApp(platformIoPort: fakePort));
+    await tester.pumpWidget(GpxLabApp(platformIoPort: fakePort));
     await tester.tap(find.byKey(const Key('import-source-button')));
     await tester.pump();
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));

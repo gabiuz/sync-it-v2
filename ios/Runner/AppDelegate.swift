@@ -4,8 +4,8 @@ import UIKit
 final class IncomingFilesCoordinator: NSObject, FlutterStreamHandler {
   static let shared = IncomingFilesCoordinator()
 
-  private let methodChannelName = "com.gabiuz.sync_it/incoming_files"
-  private let eventChannelName = "com.gabiuz.sync_it/incoming_files_events"
+  private let methodChannelName = "com.gabiuz.gpx_lab/incoming_files"
+  private let eventChannelName = "com.gabiuz.gpx_lab/incoming_files_events"
   private let supportedExtensions: Set<String> = ["gpx", "tcx", "fit"]
 
   private var initialBatch: [String: Any]?
@@ -66,7 +66,7 @@ final class IncomingFilesCoordinator: NSObject, FlutterStreamHandler {
       let ext = url.pathExtension.lowercased()
       if !ext.isEmpty && !supportedExtensions.contains(ext) {
         errors.append(
-          "Unsupported file type \"\(fileName)\". Sync-It only supports .gpx, .tcx, and .fit files."
+          "Unsupported file type \"\(fileName)\". GPX Lab only supports .gpx, .tcx, and .fit files."
         )
         continue
       }
