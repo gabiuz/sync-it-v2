@@ -295,13 +295,18 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
           _activeResult.activity,
           _currentEdit,
         );
+      case ExportFormat.tcx:
+        return CoreEngine.exportTcxInIsolate(
+          _activeResult.activity,
+          _currentEdit,
+        );
       case ExportFormat.gpx:
         return CoreEngine.exportGpxInIsolate(
           _activeResult.activity,
           _currentEdit,
         );
-      case ExportFormat.tcx:
-        return CoreEngine.exportTcxInIsolate(
+      case ExportFormat.kml:
+        return CoreEngine.exportKmlInIsolate(
           _activeResult.activity,
           _currentEdit,
         );
@@ -1475,6 +1480,13 @@ class _ExportTab extends StatelessWidget {
   final VoidCallback onCopyDescription;
   final VoidCallback onOpenStravaUpload;
 
+  bool _isProminentDistanceOverrideWarning(ExportWarning w) =>
+      hasDistanceOverride &&
+      ((exportFormat == ExportFormat.gpx &&
+              w.code == ExportWarningCode.gpxDropsCumulativeDistance) ||
+          (exportFormat == ExportFormat.kml &&
+              w.code == ExportWarningCode.kmlDropsCumulativeDistance));
+
   @override
   Widget build(BuildContext context) {
     final shortLabel = exportFormat.extension.toUpperCase();
@@ -1513,17 +1525,17 @@ class _ExportTab extends StatelessWidget {
           ),
         ),
         for (final warning in exportWarnings.where(
-          (w) =>
-              w.isBlocking ||
-              (hasDistanceOverride &&
-                  exportFormat == ExportFormat.gpx &&
-                  w.code == ExportWarningCode.gpxDropsCumulativeDistance),
+          (w) => w.isBlocking || _isProminentDistanceOverrideWarning(w),
         )) ...[
           const SizedBox(height: 12),
           _ExportWarningCard(
             key: warning.isBlocking
                 ? const Key('export-blocking-warning')
-                : const Key('gpx-distance-override-warning'),
+                : Key(
+                    exportFormat == ExportFormat.kml
+                        ? 'kml-distance-override-warning'
+                        : 'gpx-distance-override-warning',
+                  ),
             warning: warning,
           ),
         ],
@@ -1620,11 +1632,7 @@ class _ExportTab extends StatelessWidget {
           ),
         ),
         for (final warning in exportWarnings.where(
-          (w) =>
-              !w.isBlocking &&
-              !(hasDistanceOverride &&
-                  exportFormat == ExportFormat.gpx &&
-                  w.code == ExportWarningCode.gpxDropsCumulativeDistance),
+          (w) => !w.isBlocking && !_isProminentDistanceOverrideWarning(w),
         )) ...[
           const SizedBox(height: 12),
           _ExportWarningCard(

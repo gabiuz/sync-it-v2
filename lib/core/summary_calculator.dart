@@ -612,6 +612,45 @@ class SummaryCalculator {
           );
         }
         break;
+
+      case ExportFormat.kml:
+        if (!hasGps) {
+          warnings.add(
+            const ExportWarning(
+              code: ExportWarningCode.kmlRequiresGps,
+              message:
+                  'KML requires GPS coordinates on every trackpoint. Choose FIT or TCX for a mapless Export File, or re-enable GPS Position.',
+              isBlocking: true,
+            ),
+          );
+        }
+        warnings.add(
+          const ExportWarning(
+            code: ExportWarningCode.kmlNotAcceptedByStrava,
+            message:
+                'Strava\'s manual web uploader does not accept KML files (only FIT, TCX, and GPX). Choose FIT, TCX, or GPX to upload to Strava.',
+          ),
+        );
+        if (hasDistance) {
+          warnings.add(
+            ExportWarning(
+              code: ExportWarningCode.kmlDropsCumulativeDistance,
+              message: edit.distanceOverrideMeters != null
+                  ? 'KML cannot carry cumulative distance. Your Distance Override will be dropped on KML export—choose FIT or TCX to preserve it.'
+                  : 'KML drops cumulative distance; target platforms recalculate distance from raw GPS points.',
+            ),
+          );
+        }
+        if (hasLaps || hasCalories) {
+          warnings.add(
+            const ExportWarning(
+              code: ExportWarningCode.kmlDropsLapsAndCalories,
+              message:
+                  'KML does not carry structured Laps or Calories; choose FIT or TCX to preserve them.',
+            ),
+          );
+        }
+        break;
     }
 
     return warnings;

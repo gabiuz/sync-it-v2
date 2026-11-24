@@ -31,8 +31,9 @@ enum StrippableChannel {
 /// Supported Export File formats.
 enum ExportFormat {
   fit('fit', 'FIT'),
+  tcx('tcx', 'TCX 2.0'),
   gpx('gpx', 'GPX 1.1'),
-  tcx('tcx', 'TCX 2.0');
+  kml('kml', 'KML 2.2');
 
   const ExportFormat(this.extension, this.displayName);
 
@@ -118,6 +119,10 @@ enum ExportWarningCode {
   gpxDropsPowerAndTemperature,
   tcxNarrowsSportCategory,
   tcxDropsTemperature,
+  kmlRequiresGps,
+  kmlDropsCumulativeDistance,
+  kmlDropsLapsAndCalories,
+  kmlNotAcceptedByStrava,
 }
 
 /// Format-specific lossy-export or blocking warning surfaced on the Export tab.

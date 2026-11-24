@@ -125,10 +125,10 @@ class _GpxLabShellState extends State<_GpxLabShell> {
     final dotIndex = lower.lastIndexOf('.');
     if (dotIndex != -1) {
       final ext = lower.substring(dotIndex);
-      if (ext != '.gpx' && ext != '.tcx' && ext != '.fit') {
+      if (ext != '.gpx' && ext != '.tcx' && ext != '.fit' && ext != '.kml') {
         throw ActivityParseException(
           'Unsupported file type "${picked.fileName}". '
-          'GPX Lab only supports .gpx, .tcx, and .fit files.',
+          'GPX Lab only supports .gpx, .tcx, .fit, and .kml files.',
         );
       }
     }
@@ -280,6 +280,12 @@ class _GpxLabShellState extends State<_GpxLabShell> {
     }
     if (_isTcxSource(picked.fileName, picked.bytes)) {
       return CoreEngine.parseTcxInIsolate(
+        picked.bytes,
+        fileName: picked.fileName,
+      );
+    }
+    if (_isKmlSource(picked.fileName, picked.bytes)) {
+      return CoreEngine.parseKmlInIsolate(
         picked.bytes,
         fileName: picked.fileName,
       );
@@ -484,6 +490,15 @@ class _GpxLabShellState extends State<_GpxLabShell> {
     final prefixLen = bytes.length < 512 ? bytes.length : 512;
     final head = utf8.decode(bytes.sublist(0, prefixLen), allowMalformed: true);
     return head.contains('<TrainingCenterDatabase');
+  }
+
+  static bool _isKmlSource(String fileName, List<int> bytes) {
+    if (fileName.toLowerCase().endsWith('.kml')) return true;
+    final prefixLen = bytes.length < 1024 ? bytes.length : 1024;
+    final head = utf8.decode(bytes.sublist(0, prefixLen), allowMalformed: true);
+    return RegExp(
+      r'<kml[\s>]|http://www\.opengis\.net/kml/|http://earth\.google\.com/kml/',
+    ).hasMatch(head);
   }
 
   @override
