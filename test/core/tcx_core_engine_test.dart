@@ -459,5 +459,182 @@ void main() {
       expect(gpxReparsed.activity.trackpoints[1].cadenceRpm, 92);
       expect(gpxReparsed.summary.duration, const Duration(seconds: 30));
     });
+
+    test('recovers Huawei Health TCX root creator, Outdoor run sport, Lap-level DistanceMeters without trackpoint distance, and preserves on FIT/TCX export', () {
+      const huaweiTcx = '''<?xml version="1.0" encoding="UTF-8"?>
+<TrainingCenterDatabase
+  creator="Health"
+  xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Activities>
+    <Activity Sport="Outdoor run">
+      <Id>2026-11-20T06:00:00Z</Id>
+      <Lap StartTime="2026-11-20T06:00:00Z">
+        <TotalTimeSeconds>2520.0</TotalTimeSeconds>
+        <DistanceMeters>7150.0</DistanceMeters>
+        <Calories>480</Calories>
+        <Track>
+          <Trackpoint>
+            <Time>2026-11-20T06:00:00Z</Time>
+            <Position>
+              <LatitudeDegrees>14.600000</LatitudeDegrees>
+              <LongitudeDegrees>120.984000</LongitudeDegrees>
+            </Position>
+            <AltitudeMeters>12.0</AltitudeMeters>
+            <HeartRateBpm><Value>142</Value></HeartRateBpm>
+          </Trackpoint>
+          <Trackpoint>
+            <Time>2026-11-20T06:14:00Z</Time>
+            <Position>
+              <LatitudeDegrees>14.621289</LatitudeDegrees>
+              <LongitudeDegrees>120.984000</LongitudeDegrees>
+            </Position>
+            <AltitudeMeters>16.0</AltitudeMeters>
+            <HeartRateBpm><Value>154</Value></HeartRateBpm>
+          </Trackpoint>
+          <Trackpoint>
+            <Time>2026-11-20T06:28:00Z</Time>
+            <Position>
+              <LatitudeDegrees>14.642577</LatitudeDegrees>
+              <LongitudeDegrees>120.984000</LongitudeDegrees>
+            </Position>
+            <AltitudeMeters>14.0</AltitudeMeters>
+            <HeartRateBpm><Value>160</Value></HeartRateBpm>
+          </Trackpoint>
+          <Trackpoint>
+            <Time>2026-11-20T06:42:00Z</Time>
+            <Position>
+              <LatitudeDegrees>14.663866</LatitudeDegrees>
+              <LongitudeDegrees>120.984000</LongitudeDegrees>
+            </Position>
+            <AltitudeMeters>18.0</AltitudeMeters>
+            <HeartRateBpm><Value>165</Value></HeartRateBpm>
+          </Trackpoint>
+        </Track>
+      </Lap>
+      <Notes>Outdoor run</Notes>
+    </Activity>
+  </Activities>
+</TrainingCenterDatabase>''';
+
+      final parsed = CoreEngine.parseTcx(
+        _utf8(huaweiTcx),
+        fileName: 'huawei_outdoor_run.tcx',
+      );
+
+      expect(parsed.diagnostics, isEmpty);
+      expect(parsed.activity.deviceInfo, 'Health');
+      expect(parsed.activity.sportType, SportType.running);
+      expect(parsed.activity.availableChannels, contains(Channel.distance));
+
+      final pts = parsed.activity.trackpoints;
+      expect(pts, hasLength(4));
+      expect(pts[0].cumulativeDistanceMeters, closeTo(0.0, 0.01));
+      expect(pts[1].cumulativeDistanceMeters, closeTo(7150.0 / 3.0, 0.5));
+      expect(pts[2].cumulativeDistanceMeters, closeTo(7150.0 * 2.0 / 3.0, 0.5));
+      expect(pts[3].cumulativeDistanceMeters, closeTo(7150.0, 0.01));
+
+      expect(parsed.activity.laps.single.distanceMeters, closeTo(7150.0, 0.01));
+      expect(parsed.summary.gpsDistanceMeters, closeTo(7150.0, 0.01));
+      expect(parsed.summary.avgPaceSecondsPerKm, closeTo(2520.0 / 7.15, 0.05));
+
+      final diag = CoreEngine.analyzeDistance(
+        parsed.activity,
+        isImperial: false,
+      );
+      expect(diag.recordedDistanceMeters, closeTo(7150.0, 0.01));
+      expect(diag.gpsDistanceMeters, closeTo(7101.58, 0.5));
+      expect(diag.effectiveDistanceMeters, closeTo(7150.0, 0.01));
+      expect(
+        diag.stravaTaxMeters,
+        closeTo(7150.0 - diag.gpsDistanceMeters, 0.01),
+      );
+
+      // FIT export preserves recovered total distance and creator without manual override
+      final fitExport = CoreEngine.exportFit(
+        parsed.activity,
+        const ActivityEdit(),
+      );
+      final fitReparsed = CoreEngine.parseFit(fitExport.bytes);
+      expect(fitReparsed.activity.deviceInfo, 'Health');
+      expect(
+        fitReparsed.activity.trackpoints.last.cumulativeDistanceMeters,
+        closeTo(7150.0, 0.05),
+      );
+      expect(
+        fitReparsed.activity.laps.single.distanceMeters,
+        closeTo(7150.0, 0.05),
+      );
+      expect(fitReparsed.summary.gpsDistanceMeters, closeTo(7150.0, 0.05));
+
+      // TCX export preserves recovered total distance and creator without manual override
+      final tcxExport = CoreEngine.exportTcx(
+        parsed.activity,
+        const ActivityEdit(),
+      );
+      final tcxReparsed = CoreEngine.parseTcx(tcxExport.bytes);
+      expect(tcxReparsed.activity.deviceInfo, 'Health');
+      expect(
+        tcxReparsed.activity.trackpoints.last.cumulativeDistanceMeters,
+        closeTo(7150.0, 0.05),
+      );
+      expect(
+        tcxReparsed.activity.laps.single.distanceMeters,
+        closeTo(7150.0, 0.05),
+      );
+      expect(tcxReparsed.summary.gpsDistanceMeters, closeTo(7150.0, 0.05));
+    });
+
+    test('multi-Lap TCX without trackpoint distance distributes per-Lap and prefers Activity Creator over root creator', () {
+      const multiLapTcx = '''<?xml version="1.0" encoding="UTF-8"?>
+<TrainingCenterDatabase
+  creator="Health"
+  xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Activities>
+    <Activity Sport="Running">
+      <Id>2026-11-20T06:00:00Z</Id>
+      <Lap StartTime="2026-11-20T06:00:00Z">
+        <TotalTimeSeconds>300.0</TotalTimeSeconds>
+        <DistanceMeters>1020.0</DistanceMeters>
+        <Track>
+          <Trackpoint>
+            <Time>2026-11-20T06:00:00Z</Time>
+            <Position><LatitudeDegrees>14.600000</LatitudeDegrees><LongitudeDegrees>120.984000</LongitudeDegrees></Position>
+          </Trackpoint>
+          <Trackpoint>
+            <Time>2026-11-20T06:05:00Z</Time>
+            <Position><LatitudeDegrees>14.609000</LatitudeDegrees><LongitudeDegrees>120.984000</LongitudeDegrees></Position>
+          </Trackpoint>
+        </Track>
+      </Lap>
+      <Lap StartTime="2026-11-20T06:05:00Z">
+        <TotalTimeSeconds>300.0</TotalTimeSeconds>
+        <DistanceMeters>1030.0</DistanceMeters>
+        <Track>
+          <Trackpoint>
+            <Time>2026-11-20T06:10:00Z</Time>
+            <Position><LatitudeDegrees>14.618000</LatitudeDegrees><LongitudeDegrees>120.984000</LongitudeDegrees></Position>
+          </Trackpoint>
+        </Track>
+      </Lap>
+      <Notes>Two Lap Run</Notes>
+      <Creator xsi:type="Device_t">
+        <Name>HUAWEI WATCH GT 4</Name>
+      </Creator>
+    </Activity>
+  </Activities>
+</TrainingCenterDatabase>''';
+
+      final parsed = CoreEngine.parseTcx(_utf8(multiLapTcx));
+      expect(parsed.diagnostics, isEmpty);
+      expect(parsed.activity.deviceInfo, 'HUAWEI WATCH GT 4');
+      expect(parsed.activity.trackpoints[0].cumulativeDistanceMeters, closeTo(0.0, 0.01));
+      expect(parsed.activity.trackpoints[1].cumulativeDistanceMeters, closeTo(1020.0, 0.01));
+      expect(parsed.activity.trackpoints[2].cumulativeDistanceMeters, closeTo(2050.0, 0.01));
+      expect(parsed.activity.laps[0].distanceMeters, closeTo(1020.0, 0.01));
+      expect(parsed.activity.laps[1].distanceMeters, closeTo(1030.0, 0.01));
+      expect(parsed.summary.gpsDistanceMeters, closeTo(2050.0, 0.01));
+    });
   });
 }

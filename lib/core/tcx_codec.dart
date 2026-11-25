@@ -74,8 +74,16 @@ class TcxCodec {
     final (title, description) = _splitNotes(notes, fileName);
 
     final creatorEl = _firstChildByLocalName(firstActivity, 'Creator');
-    final deviceInfo =
+    final activityCreator =
         creatorEl != null ? _childText(creatorEl, 'Name') : null;
+    final rootCreator =
+        (root.getAttribute('creator') ?? root.getAttribute('Creator'))?.trim();
+    final deviceInfo =
+        (activityCreator != null && activityCreator.isNotEmpty)
+            ? activityCreator
+            : (rootCreator != null && rootCreator.isNotEmpty
+                ? rootCreator
+                : null);
 
     final lapEls = _childrenByLocalName(firstActivity, 'Lap').toList();
     if (lapEls.isEmpty) {
@@ -301,9 +309,16 @@ class TcxCodec {
       );
     }
 
-    final channels = _detectChannels(normalizedPoints);
+    final finalPoints = (!hasAnyDistance &&
+            parsedLaps.any(
+              (l) => l.distanceMeters != null && l.distanceMeters! > 0,
+            ))
+        ? _distributeLapDistances(normalizedPoints, parsedLaps)
+        : normalizedPoints;
+
+    final channels = _detectChannels(finalPoints);
     final laps = _recomputeLaps(
-      normalizedPoints,
+      finalPoints,
       parsedLaps,
       hasCalories ? totalCalories : null,
     );
@@ -312,7 +327,7 @@ class TcxCodec {
       title: title,
       description: description,
       sportType: sportType,
-      trackpoints: normalizedPoints,
+      trackpoints: finalPoints,
       laps: laps,
       availableChannels: channels,
       calories: hasCalories ? totalCalories : null,
@@ -662,6 +677,79 @@ class TcxCodec {
       if (pt.temperatureCelsius != null) channels.add(Channel.temperature);
     }
     return channels;
+  }
+
+  static List<Trackpoint> _distributeLapDistances(
+    List<Trackpoint> points,
+    List<_ParsedLapMeta> metaLaps,
+  ) {
+    if (points.isEmpty || metaLaps.isEmpty) return points;
+    final distributed = <Trackpoint>[];
+    var runningDist = 0.0;
+    var ptIdx = 0;
+    Trackpoint? prevPoint;
+
+    for (var i = 0; i < metaLaps.length; i++) {
+      final meta = metaLaps[i];
+      final isLast = i == metaLaps.length - 1;
+      final lapPoints = <Trackpoint>[];
+      while (ptIdx < points.length) {
+        final pt = points[ptIdx];
+        if (!isLast && pt.timestamp.isAfter(meta.endTime)) {
+          break;
+        }
+        lapPoints.add(pt);
+        ptIdx++;
+      }
+
+      if (lapPoints.isEmpty) {
+        if (meta.distanceMeters != null && meta.distanceMeters! > 0) {
+          runningDist += meta.distanceMeters!;
+        }
+        continue;
+      }
+
+      final lapSpan = meta.distanceMeters ??
+          _haversineSpan(lapPoints, precedingPoint: prevPoint);
+      final scaled = SummaryCalculator.distributeDistanceRange(
+        lapPoints,
+        spanMeters: lapSpan,
+        startDistanceMeters: runningDist,
+        precedingPoint: prevPoint,
+      );
+      distributed.addAll(scaled);
+      runningDist =
+          scaled.last.cumulativeDistanceMeters ?? (runningDist + lapSpan);
+      prevPoint = lapPoints.last;
+    }
+
+    return distributed;
+  }
+
+  static double _haversineSpan(
+    List<Trackpoint> points, {
+    Trackpoint? precedingPoint,
+  }) {
+    var sum = 0.0;
+    Trackpoint? prevGps = (precedingPoint != null &&
+            precedingPoint.latitude != null &&
+            precedingPoint.longitude != null)
+        ? precedingPoint
+        : null;
+    for (final pt in points) {
+      if (pt.latitude != null && pt.longitude != null) {
+        if (prevGps != null) {
+          sum += SummaryCalculator.haversineMeters(
+            prevGps.latitude!,
+            prevGps.longitude!,
+            pt.latitude!,
+            pt.longitude!,
+          );
+        }
+        prevGps = pt;
+      }
+    }
+    return sum;
   }
 
   static List<Lap> _recomputeLaps(

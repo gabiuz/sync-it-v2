@@ -73,6 +73,24 @@ class GpxCodec {
         '';
     final rawType = _childText(firstTrack, 'type');
     final sportType = SportType.fromGpxType(rawType);
+    final rawCreator = root.getAttribute('creator')?.trim();
+    final deviceInfo =
+        (rawCreator != null && rawCreator.isNotEmpty) ? rawCreator : null;
+
+    double? recoveredTotalDistance;
+    for (final trk in tracks) {
+      final trkExt = _firstChildByLocalName(trk, 'extensions');
+      if (trkExt == null) continue;
+      for (final node in trkExt.descendants.whereType<XmlElement>()) {
+        if (node.localName.toLowerCase() == 'totaldistance') {
+          final dist = double.tryParse(node.innerText.trim());
+          if (dist != null && dist.isFinite && dist > 0) {
+            recoveredTotalDistance = (recoveredTotalDistance ?? 0.0) + dist;
+            break;
+          }
+        }
+      }
+    }
 
     final rawPoints = <Trackpoint>[];
     var missingTimestampCount = 0;
@@ -213,12 +231,21 @@ class GpxCodec {
       );
     }
 
+    final finalPoints =
+        (recoveredTotalDistance != null && recoveredTotalDistance > 0)
+            ? SummaryCalculator.distributeDistanceRange(
+                normalizedPoints,
+                spanMeters: recoveredTotalDistance,
+              )
+            : normalizedPoints;
+
     final channels = <Channel>{};
-    for (final pt in normalizedPoints) {
+    for (final pt in finalPoints) {
       if (pt.latitude != null && pt.longitude != null) {
         channels.add(Channel.gps);
       }
       if (pt.elevationMeters != null) channels.add(Channel.elevation);
+      if (pt.cumulativeDistanceMeters != null) channels.add(Channel.distance);
       if (pt.heartRateBpm != null) channels.add(Channel.heartRate);
       if (pt.cadenceRpm != null) channels.add(Channel.cadence);
       if (pt.powerWatts != null) channels.add(Channel.power);
@@ -228,14 +255,16 @@ class GpxCodec {
       title: rawTitle,
       description: rawDesc,
       sportType: sportType,
-      trackpoints: normalizedPoints,
+      trackpoints: finalPoints,
       laps: [
         Lap(
-          startTime: normalizedPoints.first.timestamp,
-          endTime: normalizedPoints.last.timestamp,
+          startTime: finalPoints.first.timestamp,
+          endTime: finalPoints.last.timestamp,
+          distanceMeters: finalPoints.last.cumulativeDistanceMeters,
         ),
       ],
       availableChannels: channels,
+      deviceInfo: deviceInfo,
     );
 
     return ParseResult(
