@@ -11,10 +11,12 @@ import 'package:gpx_lab/port/platform_io_port.dart';
 class _FakeKmlPlatformIoPort implements PlatformIoPort {
   _FakeKmlPlatformIoPort({
     this.nextPickedFile,
+    this.pickedFiles = const [],
     this.initialBatch,
   });
 
   PickedSourceFile? nextPickedFile;
+  List<PickedSourceFile> pickedFiles;
   IncomingSourceBatch? initialBatch;
   String? lastSavedFileName;
   Uint8List? lastSavedBytes;
@@ -30,7 +32,7 @@ class _FakeKmlPlatformIoPort implements PlatformIoPort {
   Future<PickedSourceFile?> pickSourceFile() async => nextPickedFile;
 
   @override
-  Future<List<PickedSourceFile>> pickMultipleSourceFiles() async => const [];
+  Future<List<PickedSourceFile>> pickMultipleSourceFiles() async => pickedFiles;
 
   @override
   Future<bool> saveExportFile({
@@ -194,10 +196,13 @@ void main() {
       expect(find.text('GPX'), findsOneWidget);
       expect(find.text('KML'), findsOneWidget);
       expect(find.text('2026-11-19_kml_tempo_edit.fit'), findsOneWidget);
+      expect(find.byKey(const Key('strava-upload-helper-card')), findsOneWidget);
 
-      // Switch to KML -> updates filename & surfaces Distance Override + Strava incompatibility warnings
+      // Switch to KML -> updates filename, hides Strava Upload Helper, and surfaces Distance Override + Strava incompatibility warnings
       await tester.tap(find.text('KML'));
       await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('strava-upload-helper-card')), findsNothing);
 
       final filenameField = find.byKey(const Key('export-filename-field'));
       expect(
@@ -394,6 +399,124 @@ void main() {
       await tester.tap(find.text('Edit & Channels'));
       await tester.pumpAndSettle();
       expect(find.text('Channel Blending'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'stitches multiple KML parts sequentially end-to-end and exports continuous KML',
+    (tester) async {
+      const part1Kml = '''<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"
+  xmlns:gx="http://www.google.com/kml/ext/2.2">
+  <Document>
+    <name>Morning KML Part 1</name>
+    <ExtendedData><Data name="sport"><value>running</value></Data></ExtendedData>
+    <Placemark>
+      <gx:Track>
+        <when>2026-11-20T06:00:00Z</when>
+        <when>2026-11-20T06:05:00Z</when>
+        <gx:coord>120.984000 14.600000 10.0</gx:coord>
+        <gx:coord>120.984000 14.604500 18.0</gx:coord>
+        <ExtendedData>
+          <SchemaData schemaUrl="#s">
+            <gx:SimpleArrayData name="heartrate">
+              <gx:value>140</gx:value>
+              <gx:value>152</gx:value>
+            </gx:SimpleArrayData>
+          </SchemaData>
+        </ExtendedData>
+      </gx:Track>
+    </Placemark>
+  </Document>
+</kml>''';
+
+      const part2Kml = '''<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"
+  xmlns:gx="http://www.google.com/kml/ext/2.2">
+  <Document>
+    <name>Morning KML Part 2</name>
+    <ExtendedData><Data name="sport"><value>running</value></Data></ExtendedData>
+    <Placemark>
+      <gx:Track>
+        <when>2026-11-20T06:15:00Z</when>
+        <when>2026-11-20T06:20:00Z</when>
+        <gx:coord>120.984000 14.604500 18.0</gx:coord>
+        <gx:coord>120.984000 14.609000 26.0</gx:coord>
+        <ExtendedData>
+          <SchemaData schemaUrl="#s">
+            <gx:SimpleArrayData name="heartrate">
+              <gx:value>156</gx:value>
+              <gx:value>164</gx:value>
+            </gx:SimpleArrayData>
+          </SchemaData>
+        </ExtendedData>
+      </gx:Track>
+    </Placemark>
+  </Document>
+</kml>''';
+
+      final fakePort = _FakeKmlPlatformIoPort(
+        pickedFiles: [
+          PickedSourceFile(fileName: 'part2.kml', bytes: _utf8(part2Kml)),
+          PickedSourceFile(fileName: 'part1.kml', bytes: _utf8(part1Kml)),
+        ],
+      );
+      addTearDown(fakePort.dispose);
+
+      await tester.pumpWidget(GpxLabApp(platformIoPort: fakePort));
+      await tester.tap(find.byKey(const Key('stitch-parts-button')));
+      await _settleIsolateWork(tester);
+
+      // Initially preserves gap: 06:00 -> 06:20 = 20:00
+      expect(find.text('20:00'), findsOneWidget);
+
+      // Edit & Channels -> chronological order & toggle Remove gap
+      await tester.tap(find.text('Edit & Channels'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sequential Stitching'), findsOneWidget);
+      final part0Tile = tester.widget<ListTile>(
+        find.byKey(const Key('stitch-part-0')),
+      );
+      final part1Tile = tester.widget<ListTile>(
+        find.byKey(const Key('stitch-part-1')),
+      );
+      expect((part0Tile.title as Text).data, contains('part1.kml'));
+      expect((part1Tile.title as Text).data, contains('part2.kml'));
+
+      final removeGapSwitch = find.byKey(const Key('stitch-remove-gap-switch'));
+      await tester.scrollUntilVisible(
+        removeGapSwitch,
+        200.0,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.tap(removeGapSwitch);
+      await _settleIsolateWork(tester);
+
+      // Shifted timeline: 06:00:00 -> 06:10:01 (10:01)
+      await tester.tap(find.text('Overview'));
+      await tester.pumpAndSettle();
+      expect(find.text('10:01'), findsOneWidget);
+
+      // Export as KML and verify stitched trackpoints & HR
+      await tester.tap(find.text('Export'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('KML'));
+      await tester.pumpAndSettle();
+
+      final saveKmlBtn = find.text('Save KML');
+      await tester.ensureVisible(saveKmlBtn);
+      await tester.pumpAndSettle();
+      await tester.tap(saveKmlBtn);
+      await _settleIsolateWork(tester);
+
+      expect(fakePort.lastSavedFileName, endsWith('.kml'));
+      expect(fakePort.lastSavedBytes, isNotNull);
+      final reparsed = CoreEngine.parseKml(fakePort.lastSavedBytes!);
+      expect(reparsed.activity.trackpoints, hasLength(4));
+      expect(reparsed.summary.duration, const Duration(minutes: 10, seconds: 1));
+      expect(reparsed.activity.trackpoints[0].heartRateBpm, 140);
+      expect(reparsed.activity.trackpoints[3].heartRateBpm, 164);
     },
   );
 }

@@ -120,8 +120,51 @@ void main() {
         );
         final exportedXml = utf8.decode(exported.bytes);
         expect(exportedXml, contains('<gx:Track>'));
+        expect(exportedXml, contains('<altitudeMode>absolute</altitudeMode>'));
         expect(exportedXml, isNot(contains('name="power"')));
         expect(exportedXml, isNot(contains('HUAWEI WATCH GT 4')));
+
+        // Stripping elevation switches <altitudeMode> to clampToGround
+        final noElevationExport = CoreEngine.exportKml(
+          parsed.activity,
+          const ActivityEdit(
+            strippedChannels: {StrippableChannel.elevation},
+          ),
+        );
+        expect(
+          utf8.decode(noElevationExport.bytes),
+          contains('<altitudeMode>clampToGround</altitudeMode>'),
+        );
+
+        // Activity with no elevation natively also emits clampToGround
+        final flatActivity = Activity(
+          title: 'Flat Track',
+          description: '',
+          sportType: SportType.running,
+          availableChannels: const {Channel.gps},
+          trackpoints: [
+            Trackpoint(
+              timestamp: DateTime.utc(2026, 11, 19, 6, 30, 0),
+              latitude: 14.5995,
+              longitude: 120.9842,
+            ),
+            Trackpoint(
+              timestamp: DateTime.utc(2026, 11, 19, 6, 31, 0),
+              latitude: 14.6005,
+              longitude: 120.9842,
+            ),
+          ],
+          laps: [
+            Lap(
+              startTime: DateTime.utc(2026, 11, 19, 6, 30, 0),
+              endTime: DateTime.utc(2026, 11, 19, 6, 31, 0),
+            ),
+          ],
+        );
+        final flatXml = utf8.decode(
+          CoreEngine.exportKml(flatActivity, const ActivityEdit()).bytes,
+        );
+        expect(flatXml, contains('<altitudeMode>clampToGround</altitudeMode>'));
 
         final reparsed = CoreEngine.parseKml(exported.bytes);
         expect(reparsed.diagnostics, isEmpty);

@@ -5,6 +5,7 @@ import 'package:xml/xml.dart';
 
 import 'models.dart';
 import 'summary_calculator.dart';
+import 'xml_track_codec_helpers.dart';
 
 /// Pure-Dart KML 2.2 (`<gx:Track>` and timestamped `<Placemark>`) parser and
 /// serializer.
@@ -14,34 +15,50 @@ class KmlCodec {
   static const _kmlNamespace = 'http://www.opengis.net/kml/2.2';
   static const _gxNamespace = 'http://www.google.com/kml/ext/2.2';
 
-  static const _hrAliases = <String>{
-    'heartrate',
-    'heart_rate',
-    'hr',
-    'bpm',
-    'heart rate',
-  };
-  static const _cadenceAliases = <String>{
-    'cadence',
-    'cad',
-    'runcadence',
-    'run_cadence',
-    'rpm',
-    'spm',
-    'step_rate',
-  };
-  static const _powerAliases = <String>{
-    'power',
-    'watts',
-    'watt',
-  };
-  static const _tempAliases = <String>{
-    'temperature',
-    'temp',
-    'atemp',
-    'airtemp',
-    'air_temp',
-  };
+  static int? _readHeartRate(Trackpoint pt) => pt.heartRateBpm;
+  static int? _readCadence(Trackpoint pt) => pt.cadenceRpm;
+  static int? _readPower(Trackpoint pt) => pt.powerWatts;
+  static int? _readTemperature(Trackpoint pt) => pt.temperatureCelsius;
+
+  static const _sensorSpecs = <_KmlSensorChannelSpec>[
+    _KmlSensorChannelSpec(
+      channel: Channel.heartRate,
+      fieldName: 'heartrate',
+      displayName: 'Heart Rate',
+      aliases: {'heartrate', 'heart_rate', 'hr', 'bpm', 'heart rate'},
+      extractValue: _readHeartRate,
+    ),
+    _KmlSensorChannelSpec(
+      channel: Channel.cadence,
+      fieldName: 'cadence',
+      displayName: 'Cadence',
+      aliases: {
+        'cadence',
+        'cad',
+        'runcadence',
+        'run_cadence',
+        'rpm',
+        'spm',
+        'step_rate',
+      },
+      extractValue: _readCadence,
+    ),
+    _KmlSensorChannelSpec(
+      channel: Channel.power,
+      fieldName: 'power',
+      displayName: 'Power',
+      aliases: {'power', 'watts', 'watt'},
+      extractValue: _readPower,
+    ),
+    _KmlSensorChannelSpec(
+      channel: Channel.temperature,
+      fieldName: 'temperature',
+      displayName: 'Temperature',
+      aliases: {'temperature', 'temp', 'atemp', 'airtemp', 'air_temp'},
+      extractValue: _readTemperature,
+    ),
+  ];
+
   static const _metadataKeys = <String>{
     'sport',
     'sporttype',
@@ -52,53 +69,35 @@ class KmlCodec {
   };
 
   static ParseResult parse(Uint8List bytes, {String? fileName}) {
-    if (bytes.isEmpty) {
-      throw const ActivityParseException(
-        'The selected KML file is empty. Choose a valid KML activity file.',
-      );
-    }
-
-    final String xmlString;
-    try {
-      xmlString = utf8.decode(bytes);
-    } on FormatException {
-      throw const ActivityParseException(
-        'Could not read the file as UTF-8 text. Ensure the file is a valid KML XML file.',
-      );
-    }
-
-    final XmlDocument document;
-    try {
-      document = XmlDocument.parse(xmlString);
-    } on XmlException catch (e) {
-      throw ActivityParseException(
-        'Corrupted KML XML file: ${e.message}. Export a fresh KML file from your watch or app and try again.',
-      );
-    }
-
+    final document = XmlTrackCodecHelpers.parseXmlDocument(
+      bytes,
+      formatLabel: 'KML',
+      expectedRootLocalName: 'kml',
+    );
     final root = document.rootElement;
-    if (root.localName != 'kml') {
-      throw ActivityParseException(
-        'Expected a <kml> root element, found <${root.localName}>. Select a valid KML file.',
-      );
-    }
 
-    final documentEl = _firstChildByLocalName(root, 'Document');
+    final documentEl =
+        XmlTrackCodecHelpers.firstChildByLocalName(root, 'Document');
     final placemarks = root.descendants
         .whereType<XmlElement>()
         .where((e) => e.localName == 'Placemark')
         .toList();
     final firstPlacemark = placemarks.isNotEmpty ? placemarks.first : null;
 
-    final rawTitle = (documentEl != null ? _childText(documentEl, 'name') : null) ??
-        (firstPlacemark != null ? _childText(firstPlacemark, 'name') : null) ??
-        _fallbackTitle(fileName);
-    final rawDesc =
-        (documentEl != null ? _childText(documentEl, 'description') : null) ??
-            (firstPlacemark != null
-                ? _childText(firstPlacemark, 'description')
-                : null) ??
-            '';
+    final rawTitle = (documentEl != null
+            ? XmlTrackCodecHelpers.childText(documentEl, 'name')
+            : null) ??
+        (firstPlacemark != null
+            ? XmlTrackCodecHelpers.childText(firstPlacemark, 'name')
+            : null) ??
+        XmlTrackCodecHelpers.fallbackTitle(fileName);
+    final rawDesc = (documentEl != null
+            ? XmlTrackCodecHelpers.childText(documentEl, 'description')
+            : null) ??
+        (firstPlacemark != null
+            ? XmlTrackCodecHelpers.childText(firstPlacemark, 'description')
+            : null) ??
+        '';
 
     final docMeta = _extractDocumentMetadata(documentEl, firstPlacemark);
     final sportType = docMeta.sportType;
@@ -120,8 +119,10 @@ class KmlCodec {
     var unsupportedExtensionCount = 0;
 
     for (final trackEl in trackEls) {
-      final whenEls = _childrenByLocalName(trackEl, 'when').toList();
-      final coordEls = _childrenByLocalName(trackEl, 'coord').toList();
+      final whenEls =
+          XmlTrackCodecHelpers.childrenByLocalName(trackEl, 'when').toList();
+      final coordEls =
+          XmlTrackCodecHelpers.childrenByLocalName(trackEl, 'coord').toList();
 
       if (whenEls.isEmpty && coordEls.isNotEmpty) {
         trackMissingTimestampCount += coordEls.length;
@@ -135,6 +136,12 @@ class KmlCodec {
       if (arrays.hasUnsupported && whenEls.isNotEmpty) {
         unsupportedExtensionCount += whenEls.length;
       }
+
+      final heartRates = arrays.valuesByChannel[Channel.heartRate] ?? const [];
+      final cadences = arrays.valuesByChannel[Channel.cadence] ?? const [];
+      final powers = arrays.valuesByChannel[Channel.power] ?? const [];
+      final temperatures =
+          arrays.valuesByChannel[Channel.temperature] ?? const [];
 
       for (var i = 0; i < whenEls.length; i++) {
         final timeText = whenEls[i].innerText.trim();
@@ -156,15 +163,14 @@ class KmlCodec {
           (lat, lon, ele) = _parseGxCoord(coordEls[i].innerText);
         }
 
-        var hr = i < arrays.heartRates.length ? arrays.heartRates[i] : null;
+        var hr = i < heartRates.length ? heartRates[i] : null;
         if (hr != null && hr <= 0) {
           hr = null;
           zeroHrCount++;
         }
-        final cad = i < arrays.cadences.length ? arrays.cadences[i] : null;
-        final pwr = i < arrays.powers.length ? arrays.powers[i] : null;
-        final temp =
-            i < arrays.temperatures.length ? arrays.temperatures[i] : null;
+        final cad = i < cadences.length ? cadences[i] : null;
+        final pwr = i < powers.length ? powers[i] : null;
+        final temp = i < temperatures.length ? temperatures[i] : null;
 
         rawPoints.add(
           Trackpoint(
@@ -210,7 +216,7 @@ class KmlCodec {
         );
       }
 
-      final coordsText = _childText(pointEl, 'coordinates');
+      final coordsText = XmlTrackCodecHelpers.childText(pointEl, 'coordinates');
       final (lat, lon, ele) = coordsText != null
           ? _parsePointCoordinates(coordsText)
           : (null, null, null);
@@ -225,10 +231,10 @@ class KmlCodec {
           latitude: lat,
           longitude: lon,
           elevationMeters: ele,
-          heartRateBpm: ext.heartRate,
-          cadenceRpm: ext.cadence,
-          powerWatts: ext.power,
-          temperatureCelsius: ext.temperature,
+          heartRateBpm: ext.valuesByChannel[Channel.heartRate],
+          cadenceRpm: ext.valuesByChannel[Channel.cadence],
+          powerWatts: ext.valuesByChannel[Channel.power],
+          temperatureCelsius: ext.valuesByChannel[Channel.temperature],
         ),
       );
     }
@@ -267,94 +273,14 @@ class KmlCodec {
     }
 
     final diagnostics = <Diagnostic>[];
-
-    // Check and normalize chronological order.
-    var outOfOrderCount = 0;
-    for (var i = 1; i < rawPoints.length; i++) {
-      if (rawPoints[i].timestamp.isBefore(rawPoints[i - 1].timestamp)) {
-        outOfOrderCount++;
-      }
-    }
-
-    final indexed = rawPoints.asMap().entries.toList();
-    if (outOfOrderCount > 0) {
-      indexed.sort((a, b) {
-        final cmp = a.value.timestamp.compareTo(b.value.timestamp);
-        return cmp != 0 ? cmp : a.key.compareTo(b.key);
-      });
-      diagnostics.add(
-        Diagnostic(
-          code: DiagnosticCode.outOfOrderTrackpointsSorted,
-          severity: DiagnosticSeverity.warning,
-          message:
-              'Sorted out-of-order trackpoints chronologically ($outOfOrderCount timestamp inversion${outOfOrderCount == 1 ? '' : 's'}).',
-          count: outOfOrderCount,
-        ),
-      );
-    }
-
-    // Deduplicate adjacent identical timestamps, preferring later non-null values.
-    final normalizedPoints = <Trackpoint>[];
-    var duplicateCount = 0;
-    for (final entry in indexed) {
-      final pt = entry.value;
-      if (normalizedPoints.isNotEmpty &&
-          normalizedPoints.last.timestamp == pt.timestamp) {
-        duplicateCount++;
-        final prev = normalizedPoints.removeLast();
-        normalizedPoints.add(_mergeDuplicateTrackpoints(prev, pt));
-      } else {
-        normalizedPoints.add(pt);
-      }
-    }
-
-    if (duplicateCount > 0) {
-      diagnostics.add(
-        Diagnostic(
-          code: DiagnosticCode.duplicateTimestampsNormalized,
-          severity: DiagnosticSeverity.warning,
-          message:
-              'Merged $duplicateCount duplicate timestamp${duplicateCount == 1 ? '' : 's'}.',
-          count: duplicateCount,
-        ),
-      );
-    }
-
-    if (zeroHrCount > 0) {
-      diagnostics.add(
-        Diagnostic(
-          code: DiagnosticCode.zeroHeartRateDropped,
-          severity: DiagnosticSeverity.info,
-          message:
-              'Cleared $zeroHrCount zero-bpm heart rate dropout${zeroHrCount == 1 ? '' : 's'}.',
-          count: zeroHrCount,
-        ),
-      );
-    }
-
-    if (unsupportedExtensionCount > 0) {
-      diagnostics.add(
-        Diagnostic(
-          code: DiagnosticCode.unsupportedExtensionsDropped,
-          severity: DiagnosticSeverity.info,
-          message:
-              'Ignored unsupported vendor extensions on $unsupportedExtensionCount trackpoint${unsupportedExtensionCount == 1 ? '' : 's'}; they will not be included on export.',
-          count: unsupportedExtensionCount,
-        ),
-      );
-    }
-
-    final channels = <Channel>{};
-    for (final pt in normalizedPoints) {
-      if (pt.latitude != null && pt.longitude != null) {
-        channels.add(Channel.gps);
-      }
-      if (pt.elevationMeters != null) channels.add(Channel.elevation);
-      if (pt.heartRateBpm != null) channels.add(Channel.heartRate);
-      if (pt.cadenceRpm != null) channels.add(Channel.cadence);
-      if (pt.powerWatts != null) channels.add(Channel.power);
-      if (pt.temperatureCelsius != null) channels.add(Channel.temperature);
-    }
+    final normalizedPoints = XmlTrackCodecHelpers.normalizeTrackpoints(
+      rawPoints,
+      diagnostics: diagnostics,
+      zeroHrCount: zeroHrCount,
+      unsupportedExtensionCount: unsupportedExtensionCount,
+    );
+    final channels =
+        XmlTrackCodecHelpers.detectAvailableChannels(normalizedPoints);
 
     final activity = Activity(
       title: rawTitle,
@@ -378,21 +304,6 @@ class KmlCodec {
     );
   }
 
-  static Trackpoint _mergeDuplicateTrackpoints(Trackpoint prev, Trackpoint next) {
-    return Trackpoint(
-      timestamp: next.timestamp,
-      latitude: next.latitude ?? prev.latitude,
-      longitude: next.longitude ?? prev.longitude,
-      elevationMeters: next.elevationMeters ?? prev.elevationMeters,
-      cumulativeDistanceMeters:
-          next.cumulativeDistanceMeters ?? prev.cumulativeDistanceMeters,
-      heartRateBpm: next.heartRateBpm ?? prev.heartRateBpm,
-      cadenceRpm: next.cadenceRpm ?? prev.cadenceRpm,
-      powerWatts: next.powerWatts ?? prev.powerWatts,
-      temperatureCelsius: next.temperatureCelsius ?? prev.temperatureCelsius,
-    );
-  }
-
   static ExportResult export(Activity activity, ActivityEdit edit) {
     if (edit.strippedChannels.contains(StrippableChannel.gps)) {
       throw StateError(
@@ -406,12 +317,12 @@ class KmlCodec {
       );
     }
 
-    final hasHr = updated.availableChannels.contains(Channel.heartRate);
-    final hasCadence = updated.availableChannels.contains(Channel.cadence);
-    final hasPower = updated.availableChannels.contains(Channel.power);
-    final hasTemperature = updated.availableChannels.contains(Channel.temperature);
-    final hasTelemetryArrays =
-        hasHr || hasCadence || hasPower || hasTemperature;
+    final activeSpecs = _sensorSpecs
+        .where((spec) => updated.availableChannels.contains(spec.channel))
+        .toList();
+    final hasTelemetryArrays = activeSpecs.isNotEmpty;
+    final hasElevation =
+        updated.trackpoints.any((pt) => pt.elevationMeters != null);
 
     final builder = XmlBuilder();
     builder.processing('xml', 'version="1.0" encoding="UTF-8"');
@@ -453,32 +364,11 @@ class KmlCodec {
               'Schema',
               attributes: {'id': 'gpx_lab_schema'},
               nest: () {
-                if (hasHr) {
+                for (final spec in activeSpecs) {
                   _writeSimpleArrayField(
                     builder,
-                    name: 'heartrate',
-                    displayName: 'Heart Rate',
-                  );
-                }
-                if (hasCadence) {
-                  _writeSimpleArrayField(
-                    builder,
-                    name: 'cadence',
-                    displayName: 'Cadence',
-                  );
-                }
-                if (hasPower) {
-                  _writeSimpleArrayField(
-                    builder,
-                    name: 'power',
-                    displayName: 'Power',
-                  );
-                }
-                if (hasTemperature) {
-                  _writeSimpleArrayField(
-                    builder,
-                    name: 'temperature',
-                    displayName: 'Temperature',
+                    name: spec.fieldName,
+                    displayName: spec.displayName,
                   );
                 }
               },
@@ -491,7 +381,10 @@ class KmlCodec {
               builder.element('description', nest: updated.description);
             }
             builder.element('gx:Track', nest: () {
-              builder.element('altitudeMode', nest: 'clampToGround');
+              builder.element(
+                'altitudeMode',
+                nest: hasElevation ? 'absolute' : 'clampToGround',
+              );
               for (final pt in updated.trackpoints) {
                 builder.element(
                   'when',
@@ -517,40 +410,12 @@ class KmlCodec {
                     'SchemaData',
                     attributes: {'schemaUrl': '#gpx_lab_schema'},
                     nest: () {
-                      if (hasHr) {
+                      for (final spec in activeSpecs) {
                         _writeSimpleArrayData(
                           builder,
-                          name: 'heartrate',
-                          values: updated.trackpoints
-                              .map((pt) => pt.heartRateBpm)
-                              .toList(),
-                        );
-                      }
-                      if (hasCadence) {
-                        _writeSimpleArrayData(
-                          builder,
-                          name: 'cadence',
-                          values: updated.trackpoints
-                              .map((pt) => pt.cadenceRpm)
-                              .toList(),
-                        );
-                      }
-                      if (hasPower) {
-                        _writeSimpleArrayData(
-                          builder,
-                          name: 'power',
-                          values: updated.trackpoints
-                              .map((pt) => pt.powerWatts)
-                              .toList(),
-                        );
-                      }
-                      if (hasTemperature) {
-                        _writeSimpleArrayData(
-                          builder,
-                          name: 'temperature',
-                          values: updated.trackpoints
-                              .map((pt) => pt.temperatureCelsius)
-                              .toList(),
+                          name: spec.fieldName,
+                          values:
+                              updated.trackpoints.map(spec.extractValue).toList(),
                         );
                       }
                     },
@@ -652,24 +517,30 @@ class KmlCodec {
     return validGps ? (lat, lon, validEle) : (null, null, validEle);
   }
 
+  static _KmlSensorChannelSpec? _findSensorSpec(String rawName) {
+    for (final spec in _sensorSpecs) {
+      if (spec.aliases.contains(rawName)) return spec;
+    }
+    return null;
+  }
+
   static _SimpleArrayDataResult _extractSimpleArrayData(XmlElement trackEl) {
     final extContainers = <XmlElement>[
-      ..._childrenByLocalName(trackEl, 'ExtendedData'),
+      ...XmlTrackCodecHelpers.childrenByLocalName(trackEl, 'ExtendedData'),
     ];
     if (extContainers.isEmpty) {
       final parent = trackEl.parentElement;
       if (parent != null && parent.localName == 'Placemark') {
-        extContainers.addAll(_childrenByLocalName(parent, 'ExtendedData'));
+        extContainers.addAll(
+          XmlTrackCodecHelpers.childrenByLocalName(parent, 'ExtendedData'),
+        );
       }
     }
     if (extContainers.isEmpty) {
       return const _SimpleArrayDataResult();
     }
 
-    var heartRates = const <int?>[];
-    var cadences = const <int?>[];
-    var powers = const <int?>[];
-    var temperatures = const <int?>[];
+    final valuesByChannel = <Channel, List<int?>>{};
     var hasUnsupported = false;
 
     for (final ext in extContainers) {
@@ -681,14 +552,9 @@ class KmlCodec {
             .map((v) => _parseOptionalInt(v.innerText))
             .toList();
 
-        if (_hrAliases.contains(name)) {
-          if (heartRates.isEmpty) heartRates = values;
-        } else if (_cadenceAliases.contains(name)) {
-          if (cadences.isEmpty) cadences = values;
-        } else if (_powerAliases.contains(name)) {
-          if (powers.isEmpty) powers = values;
-        } else if (_tempAliases.contains(name)) {
-          if (temperatures.isEmpty) temperatures = values;
+        final spec = _findSensorSpec(name);
+        if (spec != null) {
+          valuesByChannel.putIfAbsent(spec.channel, () => values);
         } else {
           hasUnsupported = true;
         }
@@ -696,25 +562,24 @@ class KmlCodec {
     }
 
     return _SimpleArrayDataResult(
-      heartRates: heartRates,
-      cadences: cadences,
-      powers: powers,
-      temperatures: temperatures,
+      valuesByChannel: valuesByChannel,
       hasUnsupported: hasUnsupported,
     );
   }
 
   static String? _extractPlacemarkTimestamp(XmlElement placemark) {
-    final timeStampEl = _firstChildByLocalName(placemark, 'TimeStamp');
+    final timeStampEl =
+        XmlTrackCodecHelpers.firstChildByLocalName(placemark, 'TimeStamp');
     if (timeStampEl != null) {
-      final when = _childText(timeStampEl, 'when');
+      final when = XmlTrackCodecHelpers.childText(timeStampEl, 'when');
       if (when != null) return when;
     }
-    final directWhen = _childText(placemark, 'when');
+    final directWhen = XmlTrackCodecHelpers.childText(placemark, 'when');
     if (directWhen != null) return directWhen;
-    final timeSpanEl = _firstChildByLocalName(placemark, 'TimeSpan');
+    final timeSpanEl =
+        XmlTrackCodecHelpers.firstChildByLocalName(placemark, 'TimeSpan');
     if (timeSpanEl != null) {
-      return _childText(timeSpanEl, 'begin');
+      return XmlTrackCodecHelpers.childText(timeSpanEl, 'begin');
     }
     return null;
   }
@@ -728,7 +593,8 @@ class KmlCodec {
 
     for (final container in [documentEl, firstPlacemark]) {
       if (container == null) continue;
-      final ext = _firstChildByLocalName(container, 'ExtendedData');
+      final ext =
+          XmlTrackCodecHelpers.firstChildByLocalName(container, 'ExtendedData');
       if (ext == null) continue;
       for (final entry in _readNamedDataPairs(ext)) {
         final key = entry.key;
@@ -753,13 +619,11 @@ class KmlCodec {
   static _KmlPlacemarkExtensionData _extractPlacemarkExtensions(
     XmlElement placemark,
   ) {
-    final ext = _firstChildByLocalName(placemark, 'ExtendedData');
+    final ext =
+        XmlTrackCodecHelpers.firstChildByLocalName(placemark, 'ExtendedData');
     if (ext == null) return const _KmlPlacemarkExtensionData();
 
-    int? hr;
-    int? cad;
-    int? power;
-    int? temp;
+    final valuesByChannel = <Channel, int>{};
     var droppedZeroHr = false;
     var hasUnsupported = false;
 
@@ -767,31 +631,23 @@ class KmlCodec {
       final key = entry.key;
       if (_metadataKeys.contains(key)) continue;
 
-      final parsed = _parseOptionalInt(entry.value);
-      if (_hrAliases.contains(key)) {
-        if (parsed != null) {
-          if (parsed <= 0) {
-            droppedZeroHr = true;
-          } else {
-            hr ??= parsed;
-          }
-        }
-      } else if (_cadenceAliases.contains(key)) {
-        if (parsed != null) cad ??= parsed;
-      } else if (_powerAliases.contains(key)) {
-        if (parsed != null) power ??= parsed;
-      } else if (_tempAliases.contains(key)) {
-        if (parsed != null) temp ??= parsed;
-      } else {
+      final spec = _findSensorSpec(key);
+      if (spec == null) {
         hasUnsupported = true;
+        continue;
+      }
+
+      final parsed = _parseOptionalInt(entry.value);
+      if (parsed == null) continue;
+      if (spec.channel == Channel.heartRate && parsed <= 0) {
+        droppedZeroHr = true;
+      } else {
+        valuesByChannel.putIfAbsent(spec.channel, () => parsed);
       }
     }
 
     return _KmlPlacemarkExtensionData(
-      heartRate: hr,
-      cadence: cad,
-      power: power,
-      temperature: temp,
+      valuesByChannel: valuesByChannel,
       droppedZeroHr: droppedZeroHr,
       hasUnsupportedExtensions: hasUnsupported,
     );
@@ -803,7 +659,7 @@ class KmlCodec {
       final local = node.localName.toLowerCase();
       if (local == 'data') {
         final name = (node.getAttribute('name') ?? '').trim().toLowerCase();
-        final value = _childText(node, 'value') ?? '';
+        final value = XmlTrackCodecHelpers.childText(node, 'value') ?? '';
         if (name.isNotEmpty && value.isNotEmpty) {
           pairs.add(MapEntry(name, value));
         }
@@ -828,48 +684,31 @@ class KmlCodec {
     if (asDouble != null && asDouble.isFinite) return asDouble.round();
     return null;
   }
+}
 
-  static XmlElement? _firstChildByLocalName(XmlElement parent, String name) {
-    for (final child in parent.childElements) {
-      if (child.localName == name) return child;
-    }
-    return null;
-  }
+class _KmlSensorChannelSpec {
+  const _KmlSensorChannelSpec({
+    required this.channel,
+    required this.fieldName,
+    required this.displayName,
+    required this.aliases,
+    required this.extractValue,
+  });
 
-  static Iterable<XmlElement> _childrenByLocalName(
-    XmlElement parent,
-    String name,
-  ) {
-    return parent.childElements.where((c) => c.localName == name);
-  }
-
-  static String? _childText(XmlElement parent, String localName) {
-    final child = _firstChildByLocalName(parent, localName);
-    if (child == null) return null;
-    final text = child.innerText.trim();
-    return text.isEmpty ? null : text;
-  }
-
-  static String _fallbackTitle(String? fileName) {
-    if (fileName == null || fileName.trim().isEmpty) return 'Untitled Activity';
-    final dot = fileName.lastIndexOf('.');
-    return dot > 0 ? fileName.substring(0, dot) : fileName;
-  }
+  final Channel channel;
+  final String fieldName;
+  final String displayName;
+  final Set<String> aliases;
+  final int? Function(Trackpoint pt) extractValue;
 }
 
 class _SimpleArrayDataResult {
   const _SimpleArrayDataResult({
-    this.heartRates = const [],
-    this.cadences = const [],
-    this.powers = const [],
-    this.temperatures = const [],
+    this.valuesByChannel = const {},
     this.hasUnsupported = false,
   });
 
-  final List<int?> heartRates;
-  final List<int?> cadences;
-  final List<int?> powers;
-  final List<int?> temperatures;
+  final Map<Channel, List<int?>> valuesByChannel;
   final bool hasUnsupported;
 }
 
@@ -885,18 +724,12 @@ class _KmlDocumentMetadata {
 
 class _KmlPlacemarkExtensionData {
   const _KmlPlacemarkExtensionData({
-    this.heartRate,
-    this.cadence,
-    this.power,
-    this.temperature,
+    this.valuesByChannel = const {},
     this.droppedZeroHr = false,
     this.hasUnsupportedExtensions = false,
   });
 
-  final int? heartRate;
-  final int? cadence;
-  final int? power;
-  final int? temperature;
+  final Map<Channel, int> valuesByChannel;
   final bool droppedZeroHr;
   final bool hasUnsupportedExtensions;
 }

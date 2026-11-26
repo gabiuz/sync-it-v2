@@ -5,6 +5,7 @@ import 'package:xml/xml.dart';
 
 import 'models.dart';
 import 'summary_calculator.dart';
+import 'xml_track_codec_helpers.dart';
 
 /// Pure-Dart GPX 1.1 parser and serializer.
 class GpxCodec {
@@ -25,39 +26,15 @@ class GpxCodec {
   };
 
   static ParseResult parse(Uint8List bytes, {String? fileName}) {
-    if (bytes.isEmpty) {
-      throw const ActivityParseException(
-        'The selected GPX file is empty. Choose a valid GPX activity file.',
-      );
-    }
-
-    final String xmlString;
-    try {
-      xmlString = utf8.decode(bytes);
-    } on FormatException {
-      throw const ActivityParseException(
-        'Could not read the file as UTF-8 text. Ensure the file is a valid GPX XML file.',
-      );
-    }
-
-    final XmlDocument document;
-    try {
-      document = XmlDocument.parse(xmlString);
-    } on XmlException catch (e) {
-      throw ActivityParseException(
-        'Corrupted GPX XML file: ${e.message}. Export a fresh GPX file from your watch or app and try again.',
-      );
-    }
-
+    final document = XmlTrackCodecHelpers.parseXmlDocument(
+      bytes,
+      formatLabel: 'GPX',
+      expectedRootLocalName: 'gpx',
+    );
     final root = document.rootElement;
-    if (root.localName != 'gpx') {
-      throw ActivityParseException(
-        'Expected a <gpx> root element, found <${root.localName}>. Select a valid GPX file.',
-      );
-    }
 
-    final metadata = _firstChildByLocalName(root, 'metadata');
-    final tracks = _childrenByLocalName(root, 'trk').toList();
+    final metadata = XmlTrackCodecHelpers.firstChildByLocalName(root, 'metadata');
+    final tracks = XmlTrackCodecHelpers.childrenByLocalName(root, 'trk').toList();
     if (tracks.isEmpty) {
       throw const ActivityParseException(
         'This GPX file contains no <trk> track data. Route-only or empty GPX files cannot be imported as an activity.',
@@ -65,13 +42,17 @@ class GpxCodec {
     }
 
     final firstTrack = tracks.first;
-    final rawTitle = _childText(firstTrack, 'name') ??
-        (metadata != null ? _childText(metadata, 'name') : null) ??
-        _fallbackTitle(fileName);
-    final rawDesc = _childText(firstTrack, 'desc') ??
-        (metadata != null ? _childText(metadata, 'desc') : null) ??
+    final rawTitle = XmlTrackCodecHelpers.childText(firstTrack, 'name') ??
+        (metadata != null
+            ? XmlTrackCodecHelpers.childText(metadata, 'name')
+            : null) ??
+        XmlTrackCodecHelpers.fallbackTitle(fileName);
+    final rawDesc = XmlTrackCodecHelpers.childText(firstTrack, 'desc') ??
+        (metadata != null
+            ? XmlTrackCodecHelpers.childText(metadata, 'desc')
+            : null) ??
         '';
-    final rawType = _childText(firstTrack, 'type');
+    final rawType = XmlTrackCodecHelpers.childText(firstTrack, 'type');
     final sportType = SportType.fromGpxType(rawType);
 
     final rawPoints = <Trackpoint>[];
@@ -80,9 +61,10 @@ class GpxCodec {
     var unsupportedExtensionCount = 0;
 
     for (final trk in tracks) {
-      for (final seg in _childrenByLocalName(trk, 'trkseg')) {
-        for (final trkpt in _childrenByLocalName(seg, 'trkpt')) {
-          final timeText = _childText(trkpt, 'time');
+      for (final seg in XmlTrackCodecHelpers.childrenByLocalName(trk, 'trkseg')) {
+        for (final trkpt
+            in XmlTrackCodecHelpers.childrenByLocalName(seg, 'trkpt')) {
+          final timeText = XmlTrackCodecHelpers.childText(trkpt, 'time');
           if (timeText == null || timeText.trim().isEmpty) {
             missingTimestampCount++;
             continue;
@@ -96,7 +78,7 @@ class GpxCodec {
 
           final lat = double.tryParse(trkpt.getAttribute('lat') ?? '');
           final lon = double.tryParse(trkpt.getAttribute('lon') ?? '');
-          final eleText = _childText(trkpt, 'ele');
+          final eleText = XmlTrackCodecHelpers.childText(trkpt, 'ele');
           final ele = eleText != null ? double.tryParse(eleText.trim()) : null;
 
           final ext = _extractExtensions(trkpt);
@@ -136,93 +118,14 @@ class GpxCodec {
     }
 
     final diagnostics = <Diagnostic>[];
-
-    // Check and normalize chronological order.
-    var outOfOrderCount = 0;
-    for (var i = 1; i < rawPoints.length; i++) {
-      if (rawPoints[i].timestamp.isBefore(rawPoints[i - 1].timestamp)) {
-        outOfOrderCount++;
-      }
-    }
-
-    final indexed = rawPoints.asMap().entries.toList();
-    if (outOfOrderCount > 0) {
-      indexed.sort((a, b) {
-        final cmp = a.value.timestamp.compareTo(b.value.timestamp);
-        return cmp != 0 ? cmp : a.key.compareTo(b.key);
-      });
-      diagnostics.add(
-        Diagnostic(
-          code: DiagnosticCode.outOfOrderTrackpointsSorted,
-          severity: DiagnosticSeverity.warning,
-          message:
-              'Sorted out-of-order trackpoints chronologically ($outOfOrderCount timestamp inversion${outOfOrderCount == 1 ? '' : 's'}).',
-          count: outOfOrderCount,
-        ),
-      );
-    }
-
-    // Deduplicate adjacent identical timestamps, preferring later non-null values.
-    final normalizedPoints = <Trackpoint>[];
-    var duplicateCount = 0;
-    for (final entry in indexed) {
-      final pt = entry.value;
-      if (normalizedPoints.isNotEmpty &&
-          normalizedPoints.last.timestamp == pt.timestamp) {
-        duplicateCount++;
-        final prev = normalizedPoints.removeLast();
-        normalizedPoints.add(_mergeDuplicateTrackpoints(prev, pt));
-      } else {
-        normalizedPoints.add(pt);
-      }
-    }
-
-    if (duplicateCount > 0) {
-      diagnostics.add(
-        Diagnostic(
-          code: DiagnosticCode.duplicateTimestampsNormalized,
-          severity: DiagnosticSeverity.warning,
-          message:
-              'Merged $duplicateCount duplicate timestamp${duplicateCount == 1 ? '' : 's'}.',
-          count: duplicateCount,
-        ),
-      );
-    }
-
-    if (zeroHrCount > 0) {
-      diagnostics.add(
-        Diagnostic(
-          code: DiagnosticCode.zeroHeartRateDropped,
-          severity: DiagnosticSeverity.info,
-          message:
-              'Cleared $zeroHrCount zero-bpm heart rate dropout${zeroHrCount == 1 ? '' : 's'}.',
-          count: zeroHrCount,
-        ),
-      );
-    }
-
-    if (unsupportedExtensionCount > 0) {
-      diagnostics.add(
-        Diagnostic(
-          code: DiagnosticCode.unsupportedExtensionsDropped,
-          severity: DiagnosticSeverity.info,
-          message:
-              'Ignored unsupported vendor extensions on $unsupportedExtensionCount trackpoint${unsupportedExtensionCount == 1 ? '' : 's'}; they will not be included on export.',
-          count: unsupportedExtensionCount,
-        ),
-      );
-    }
-
-    final channels = <Channel>{};
-    for (final pt in normalizedPoints) {
-      if (pt.latitude != null && pt.longitude != null) {
-        channels.add(Channel.gps);
-      }
-      if (pt.elevationMeters != null) channels.add(Channel.elevation);
-      if (pt.heartRateBpm != null) channels.add(Channel.heartRate);
-      if (pt.cadenceRpm != null) channels.add(Channel.cadence);
-      if (pt.powerWatts != null) channels.add(Channel.power);
-    }
+    final normalizedPoints = XmlTrackCodecHelpers.normalizeTrackpoints(
+      rawPoints,
+      diagnostics: diagnostics,
+      zeroHrCount: zeroHrCount,
+      unsupportedExtensionCount: unsupportedExtensionCount,
+    );
+    final channels =
+        XmlTrackCodecHelpers.detectAvailableChannels(normalizedPoints);
 
     final activity = Activity(
       title: rawTitle,
@@ -242,20 +145,6 @@ class GpxCodec {
       activity: activity,
       summary: SummaryCalculator.compute(activity),
       diagnostics: diagnostics,
-    );
-  }
-
-  static Trackpoint _mergeDuplicateTrackpoints(Trackpoint prev, Trackpoint next) {
-    return Trackpoint(
-      timestamp: next.timestamp,
-      latitude: next.latitude ?? prev.latitude,
-      longitude: next.longitude ?? prev.longitude,
-      elevationMeters: next.elevationMeters ?? prev.elevationMeters,
-      cumulativeDistanceMeters:
-          next.cumulativeDistanceMeters ?? prev.cumulativeDistanceMeters,
-      heartRateBpm: next.heartRateBpm ?? prev.heartRateBpm,
-      cadenceRpm: next.cadenceRpm ?? prev.cadenceRpm,
-      powerWatts: next.powerWatts ?? prev.powerWatts,
     );
   }
 
@@ -357,7 +246,8 @@ class GpxCodec {
   }
 
   static _TrackpointExtensionData _extractExtensions(XmlElement trkpt) {
-    final extensions = _firstChildByLocalName(trkpt, 'extensions');
+    final extensions =
+        XmlTrackCodecHelpers.firstChildByLocalName(trkpt, 'extensions');
     if (extensions == null) return const _TrackpointExtensionData();
 
     int? hr;
@@ -394,33 +284,6 @@ class GpxCodec {
       droppedZeroHr: droppedZeroHr,
       hasUnsupportedExtensions: hasUnsupported,
     );
-  }
-
-  static XmlElement? _firstChildByLocalName(XmlElement parent, String name) {
-    for (final child in parent.childElements) {
-      if (child.localName == name) return child;
-    }
-    return null;
-  }
-
-  static Iterable<XmlElement> _childrenByLocalName(
-    XmlElement parent,
-    String name,
-  ) {
-    return parent.childElements.where((c) => c.localName == name);
-  }
-
-  static String? _childText(XmlElement parent, String localName) {
-    final child = _firstChildByLocalName(parent, localName);
-    if (child == null) return null;
-    final text = child.innerText.trim();
-    return text.isEmpty ? null : text;
-  }
-
-  static String _fallbackTitle(String? fileName) {
-    if (fileName == null || fileName.trim().isEmpty) return 'Untitled Activity';
-    final dot = fileName.lastIndexOf('.');
-    return dot > 0 ? fileName.substring(0, dot) : fileName;
   }
 }
 

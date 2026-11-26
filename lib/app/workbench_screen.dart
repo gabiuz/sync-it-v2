@@ -1566,71 +1566,73 @@ class _ExportTab extends StatelessWidget {
             ),
           ),
         ],
-        const SizedBox(height: 20),
-        Card(
-          key: const Key('strava-upload-helper-card'),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Strava Upload Helper',
-                  style: textTheme.titleSmall,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Copy your edited metadata and open Strava\'s manual upload page.',
-                  style: textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
+        if (exportFormat != ExportFormat.kml) ...[
+          const SizedBox(height: 20),
+          Card(
+            key: const Key('strava-upload-helper-card'),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Strava Upload Helper',
+                    style: textTheme.titleSmall,
                   ),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    OutlinedButton.icon(
-                      key: const Key('copy-title-button'),
-                      onPressed: onCopyTitle,
-                      icon: Icon(
-                        titleCopied ? Icons.check : Icons.content_copy,
-                        size: 18,
-                      ),
-                      label: const Text('Copy Title'),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Copy your edited metadata and open Strava\'s manual upload page.',
+                    style: textTheme.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant,
                     ),
-                    OutlinedButton.icon(
-                      key: const Key('copy-description-button'),
-                      onPressed: onCopyDescription,
-                      icon: Icon(
-                        descriptionCopied ? Icons.check : Icons.content_copy,
-                        size: 18,
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        key: const Key('copy-title-button'),
+                        onPressed: onCopyTitle,
+                        icon: Icon(
+                          titleCopied ? Icons.check : Icons.content_copy,
+                          size: 18,
+                        ),
+                        label: const Text('Copy Title'),
                       ),
-                      label: const Text('Copy Description'),
+                      OutlinedButton.icon(
+                        key: const Key('copy-description-button'),
+                        onPressed: onCopyDescription,
+                        icon: Icon(
+                          descriptionCopied ? Icons.check : Icons.content_copy,
+                          size: 18,
+                        ),
+                        label: const Text('Copy Description'),
+                      ),
+                    ],
+                  ),
+                  if (titleCopied || descriptionCopied) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      titleCopied ? 'Title copied' : 'Description copied',
+                      style: textTheme.labelMedium?.copyWith(
+                        color: colors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
-                ),
-                if (titleCopied || descriptionCopied) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    titleCopied ? 'Title copied' : 'Description copied',
-                    style: textTheme.labelMedium?.copyWith(
-                      color: colors.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  const SizedBox(height: 12),
+                  FilledButton.tonalIcon(
+                    key: const Key('open-strava-upload-button'),
+                    onPressed: onOpenStravaUpload,
+                    icon: const Icon(Icons.open_in_new),
+                    label: const Text('Open Strava Upload Page'),
                   ),
                 ],
-                const SizedBox(height: 12),
-                FilledButton.tonalIcon(
-                  key: const Key('open-strava-upload-button'),
-                  onPressed: onOpenStravaUpload,
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text('Open Strava Upload Page'),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
         for (final warning in exportWarnings.where(
           (w) => !w.isBlocking && !_isProminentDistanceOverrideWarning(w),
         )) ...[

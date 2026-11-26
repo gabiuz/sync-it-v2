@@ -5,11 +5,11 @@ A mobile workbench for inspecting, combining, editing, and exporting fitness act
 ## Language
 
 **Source File**:
-An imported GPX, TCX, or FIT file exported from a watch or wellness app as input to an editing session.
+An imported GPX, TCX, FIT, or KML file exported from a watch or wellness app as input to an editing session.
 _Avoid_: Raw file, track file, upload
 
 **Export File**:
-The generated GPX, TCX, or FIT file produced from an edited activity for manual upload to a target platform.
+The generated GPX, TCX, FIT, or KML file produced from an edited activity for manual upload or sharing to a target platform.
 _Avoid_: Output file, download
 
 **Activity**:

@@ -272,19 +272,19 @@ class _GpxLabShellState extends State<_GpxLabShell> {
   }
 
   Future<ParseResult> _parsePickedFile(PickedSourceFile picked) {
-    if (_isFitSource(picked.fileName, picked.bytes)) {
+    if (_isFitSource(picked)) {
       return CoreEngine.parseFitInIsolate(
         picked.bytes,
         fileName: picked.fileName,
       );
     }
-    if (_isTcxSource(picked.fileName, picked.bytes)) {
+    if (_isTcxSource(picked)) {
       return CoreEngine.parseTcxInIsolate(
         picked.bytes,
         fileName: picked.fileName,
       );
     }
-    if (_isKmlSource(picked.fileName, picked.bytes)) {
+    if (_isKmlSource(picked)) {
       return CoreEngine.parseKmlInIsolate(
         picked.bytes,
         fileName: picked.fileName,
@@ -476,8 +476,9 @@ class _GpxLabShellState extends State<_GpxLabShell> {
     }
   }
 
-  static bool _isFitSource(String fileName, List<int> bytes) {
-    if (fileName.toLowerCase().endsWith('.fit')) return true;
+  static bool _isFitSource(PickedSourceFile file) {
+    if (file.fileName.toLowerCase().endsWith('.fit')) return true;
+    final bytes = file.bytes;
     return bytes.length >= 12 &&
         bytes[8] == 0x2E &&
         bytes[9] == 0x46 &&
@@ -485,15 +486,17 @@ class _GpxLabShellState extends State<_GpxLabShell> {
         bytes[11] == 0x54;
   }
 
-  static bool _isTcxSource(String fileName, List<int> bytes) {
-    if (fileName.toLowerCase().endsWith('.tcx')) return true;
+  static bool _isTcxSource(PickedSourceFile file) {
+    if (file.fileName.toLowerCase().endsWith('.tcx')) return true;
+    final bytes = file.bytes;
     final prefixLen = bytes.length < 512 ? bytes.length : 512;
     final head = utf8.decode(bytes.sublist(0, prefixLen), allowMalformed: true);
     return head.contains('<TrainingCenterDatabase');
   }
 
-  static bool _isKmlSource(String fileName, List<int> bytes) {
-    if (fileName.toLowerCase().endsWith('.kml')) return true;
+  static bool _isKmlSource(PickedSourceFile file) {
+    if (file.fileName.toLowerCase().endsWith('.kml')) return true;
+    final bytes = file.bytes;
     final prefixLen = bytes.length < 1024 ? bytes.length : 1024;
     final head = utf8.decode(bytes.sublist(0, prefixLen), allowMalformed: true);
     return RegExp(
