@@ -345,5 +345,41 @@ void main() {
       );
       expect(tcxReparsed.summary.gpsDistanceMeters, closeTo(7150.0, 0.05));
     });
+
+    test('distributes per-trk totalDistance across each track and prefers metadata author name over root creator', () {
+      const multiTrackGpx = '''<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="RootApp"
+  xmlns="http://www.topografix.com/GPX/1/1"
+  xmlns:hw="http://www.huawei.com/gpx/extensions">
+  <metadata>
+    <name>Multi-Track Run</name>
+    <author><name>HUAWEI WATCH GT 4</name></author>
+  </metadata>
+  <trk>
+    <type>Outdoor run</type>
+    <extensions><hw:totalDistance>1050.0</hw:totalDistance></extensions>
+    <trkseg>
+      <trkpt lat="14.600000" lon="120.984000"><time>2026-11-20T06:00:00Z</time></trkpt>
+      <trkpt lat="14.609000" lon="120.984000"><time>2026-11-20T06:05:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+  <trk>
+    <type>Outdoor run</type>
+    <extensions><hw:totalDistance>2100.0</hw:totalDistance></extensions>
+    <trkseg>
+      <trkpt lat="14.618000" lon="120.984000"><time>2026-11-20T06:10:00Z</time></trkpt>
+      <trkpt lat="14.627000" lon="120.984000"><time>2026-11-20T06:15:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>''';
+
+      final parsed = CoreEngine.parseGpx(_utf8(multiTrackGpx));
+      expect(parsed.activity.deviceInfo, 'HUAWEI WATCH GT 4');
+      expect(parsed.activity.trackpoints[0].cumulativeDistanceMeters, closeTo(0.0, 0.01));
+      expect(parsed.activity.trackpoints[1].cumulativeDistanceMeters, closeTo(1050.0, 0.01));
+      expect(parsed.activity.trackpoints[2].cumulativeDistanceMeters, closeTo(2100.0, 0.5));
+      expect(parsed.activity.trackpoints[3].cumulativeDistanceMeters, closeTo(3150.0, 0.01));
+      expect(parsed.summary.gpsDistanceMeters, closeTo(3150.0, 0.01));
+    });
   });
 }

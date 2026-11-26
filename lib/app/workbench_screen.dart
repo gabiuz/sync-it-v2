@@ -458,7 +458,6 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                   summary: effectiveSummary,
                   distanceDiagnostics: distanceDiagnostics,
                   distanceOverrideMeters: _distanceOverrideMeters,
-                  onApplyNudge: _setDistanceOverride,
                   onSetDistanceOverride: _setDistanceOverride,
                   onClearDistanceOverride: _clearDistanceOverride,
                   sourceFileName: widget.sourceFileName,
@@ -610,7 +609,6 @@ class _OverviewTab extends StatelessWidget {
     required this.summary,
     required this.distanceDiagnostics,
     required this.distanceOverrideMeters,
-    required this.onApplyNudge,
     required this.onSetDistanceOverride,
     required this.onClearDistanceOverride,
     required this.sourceFileName,
@@ -625,7 +623,6 @@ class _OverviewTab extends StatelessWidget {
   final ActivitySummary summary;
   final DistanceDiagnostics distanceDiagnostics;
   final double? distanceOverrideMeters;
-  final ValueChanged<double> onApplyNudge;
   final ValueChanged<double> onSetDistanceOverride;
   final VoidCallback onClearDistanceOverride;
   final String sourceFileName;
@@ -737,7 +734,6 @@ class _OverviewTab extends StatelessWidget {
           diagnostics: distanceDiagnostics,
           distanceOverrideMeters: distanceOverrideMeters,
           unitSystem: unitSystem,
-          onApplyNudge: onApplyNudge,
           onSetDistanceOverride: onSetDistanceOverride,
           onClearDistanceOverride: onClearDistanceOverride,
         ),
@@ -765,7 +761,6 @@ class _StravaTaxCard extends StatelessWidget {
     required this.diagnostics,
     required this.distanceOverrideMeters,
     required this.unitSystem,
-    required this.onApplyNudge,
     required this.onSetDistanceOverride,
     required this.onClearDistanceOverride,
   });
@@ -773,7 +768,6 @@ class _StravaTaxCard extends StatelessWidget {
   final DistanceDiagnostics diagnostics;
   final double? distanceOverrideMeters;
   final UnitSystem unitSystem;
-  final ValueChanged<double> onApplyNudge;
   final ValueChanged<double> onSetDistanceOverride;
   final VoidCallback onClearDistanceOverride;
 
@@ -944,7 +938,7 @@ class _StravaTaxCard extends StatelessWidget {
                   FilledButton.tonalIcon(
                     key: const Key('nudge-distance-override-button'),
                     onPressed: () =>
-                        onApplyNudge(diagnostics.nudgeTargetMeters!),
+                        onSetDistanceOverride(diagnostics.nudgeTargetMeters!),
                     icon: const Icon(Icons.auto_fix_high),
                     label: Text(
                       'Nudge to ${diagnostics.nudgeTargetDisplayValue!.toStringAsFixed(2)} $unitSuffix',

@@ -219,11 +219,9 @@ class SummaryCalculator {
           pt.cumulativeDistanceMeters ?? cumulative;
     }
 
-    final baseTotal = baseDistances.last;
     final scaledPoints = _scalePointsByBaseDistances(
       points,
       baseDistances: baseDistances,
-      baseTotal: baseTotal,
       startDistanceMeters: 0.0,
       targetEndMeters: safeTarget,
     );
@@ -272,15 +270,15 @@ class SummaryCalculator {
 
   /// Proportionally distributes [spanMeters] across [points] starting from
   /// [startDistanceMeters], using 2D Haversine segments (falling back to
-  /// elapsed time or sample index when GPS distance is zero).
+  /// elapsed time or sample index when GPS distance is zero). When [spanMeters]
+  /// is `null`, the 2D Haversine span is used directly.
   static List<Trackpoint> distributeDistanceRange(
     List<Trackpoint> points, {
-    required double spanMeters,
+    double? spanMeters,
     double startDistanceMeters = 0.0,
     Trackpoint? precedingPoint,
   }) {
     if (points.isEmpty) return points;
-    final safeSpan = math.max(0.0, spanMeters);
     final baseDistances = List<double>.filled(points.length, 0.0);
     var cumulative = 0.0;
     Trackpoint? prevGps = (precedingPoint != null &&
@@ -305,10 +303,10 @@ class SummaryCalculator {
       baseDistances[i] = cumulative;
     }
 
+    final safeSpan = math.max(0.0, spanMeters ?? baseDistances.last);
     return _scalePointsByBaseDistances(
       points,
       baseDistances: baseDistances,
-      baseTotal: baseDistances.last,
       startDistanceMeters: startDistanceMeters,
       targetEndMeters: startDistanceMeters + safeSpan,
       precedingPoint: precedingPoint,
@@ -344,11 +342,11 @@ class SummaryCalculator {
   static List<Trackpoint> _scalePointsByBaseDistances(
     List<Trackpoint> points, {
     required List<double> baseDistances,
-    required double baseTotal,
     required double startDistanceMeters,
     required double targetEndMeters,
     Trackpoint? precedingPoint,
   }) {
+    final baseTotal = baseDistances.last;
     final span = math.max(0.0, targetEndMeters - startDistanceMeters);
     final originTime = precedingPoint?.timestamp ?? points.first.timestamp;
     final totalDurationMs =

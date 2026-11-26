@@ -76,14 +76,15 @@ class TcxCodec {
     final creatorEl = _firstChildByLocalName(firstActivity, 'Creator');
     final activityCreator =
         creatorEl != null ? _childText(creatorEl, 'Name') : null;
+    final authorEl = _firstChildByLocalName(root, 'Author');
+    final dbAuthor = authorEl != null ? _childText(authorEl, 'Name') : null;
     final rootCreator =
         (root.getAttribute('creator') ?? root.getAttribute('Creator'))?.trim();
-    final deviceInfo =
-        (activityCreator != null && activityCreator.isNotEmpty)
-            ? activityCreator
-            : (rootCreator != null && rootCreator.isNotEmpty
-                ? rootCreator
-                : null);
+    final deviceInfo = [activityCreator, dbAuthor, rootCreator]
+        .whereType<String>()
+        .map((s) => s.trim())
+        .firstWhere((s) => s.isNotEmpty, orElse: () => '');
+    final resolvedDeviceInfo = deviceInfo.isEmpty ? null : deviceInfo;
 
     final lapEls = _childrenByLocalName(firstActivity, 'Lap').toList();
     if (lapEls.isEmpty) {
@@ -331,7 +332,7 @@ class TcxCodec {
       laps: laps,
       availableChannels: channels,
       calories: hasCalories ? totalCalories : null,
-      deviceInfo: deviceInfo,
+      deviceInfo: resolvedDeviceInfo,
     );
 
     return ParseResult(
@@ -645,15 +646,24 @@ class TcxCodec {
   static List<List<Trackpoint>> _partitionPointsByLap(
     List<Trackpoint> points,
     List<Lap> laps,
+  ) =>
+      _partitionPointsByEndTimes(
+        points,
+        [for (final lap in laps) lap.endTime],
+      );
+
+  static List<List<Trackpoint>> _partitionPointsByEndTimes(
+    List<Trackpoint> points,
+    List<DateTime> endTimes,
   ) {
-    final result = List.generate(laps.length, (_) => <Trackpoint>[]);
+    final result = List.generate(endTimes.length, (_) => <Trackpoint>[]);
     var ptIdx = 0;
-    for (var i = 0; i < laps.length; i++) {
-      final lap = laps[i];
-      final isLast = i == laps.length - 1;
+    for (var i = 0; i < endTimes.length; i++) {
+      final endTime = endTimes[i];
+      final isLast = i == endTimes.length - 1;
       while (ptIdx < points.length) {
         final pt = points[ptIdx];
-        if (!isLast && pt.timestamp.isAfter(lap.endTime)) {
+        if (!isLast && pt.timestamp.isAfter(endTime)) {
           break;
         }
         result[i].add(pt);
@@ -684,24 +694,17 @@ class TcxCodec {
     List<_ParsedLapMeta> metaLaps,
   ) {
     if (points.isEmpty || metaLaps.isEmpty) return points;
+    final partitioned = _partitionPointsByEndTimes(
+      points,
+      [for (final meta in metaLaps) meta.endTime],
+    );
     final distributed = <Trackpoint>[];
     var runningDist = 0.0;
-    var ptIdx = 0;
     Trackpoint? prevPoint;
 
     for (var i = 0; i < metaLaps.length; i++) {
       final meta = metaLaps[i];
-      final isLast = i == metaLaps.length - 1;
-      final lapPoints = <Trackpoint>[];
-      while (ptIdx < points.length) {
-        final pt = points[ptIdx];
-        if (!isLast && pt.timestamp.isAfter(meta.endTime)) {
-          break;
-        }
-        lapPoints.add(pt);
-        ptIdx++;
-      }
-
+      final lapPoints = partitioned[i];
       if (lapPoints.isEmpty) {
         if (meta.distanceMeters != null && meta.distanceMeters! > 0) {
           runningDist += meta.distanceMeters!;
@@ -709,47 +712,19 @@ class TcxCodec {
         continue;
       }
 
-      final lapSpan = meta.distanceMeters ??
-          _haversineSpan(lapPoints, precedingPoint: prevPoint);
       final scaled = SummaryCalculator.distributeDistanceRange(
         lapPoints,
-        spanMeters: lapSpan,
+        spanMeters: meta.distanceMeters,
         startDistanceMeters: runningDist,
         precedingPoint: prevPoint,
       );
       distributed.addAll(scaled);
       runningDist =
-          scaled.last.cumulativeDistanceMeters ?? (runningDist + lapSpan);
+          scaled.last.cumulativeDistanceMeters ?? runningDist;
       prevPoint = lapPoints.last;
     }
 
     return distributed;
-  }
-
-  static double _haversineSpan(
-    List<Trackpoint> points, {
-    Trackpoint? precedingPoint,
-  }) {
-    var sum = 0.0;
-    Trackpoint? prevGps = (precedingPoint != null &&
-            precedingPoint.latitude != null &&
-            precedingPoint.longitude != null)
-        ? precedingPoint
-        : null;
-    for (final pt in points) {
-      if (pt.latitude != null && pt.longitude != null) {
-        if (prevGps != null) {
-          sum += SummaryCalculator.haversineMeters(
-            prevGps.latitude!,
-            prevGps.longitude!,
-            pt.latitude!,
-            pt.longitude!,
-          );
-        }
-        prevGps = pt;
-      }
-    }
-    return sum;
   }
 
   static List<Lap> _recomputeLaps(
@@ -767,23 +742,16 @@ class TcxCodec {
       ];
     }
 
+    final partitioned = _partitionPointsByEndTimes(
+      points,
+      [for (final meta in metaLaps) meta.endTime],
+    );
     final result = <Lap>[];
     var prevLapEndDist = 0.0;
-    var ptIdx = 0;
 
     for (var i = 0; i < metaLaps.length; i++) {
       final meta = metaLaps[i];
-      final isLast = i == metaLaps.length - 1;
-
-      final lapPoints = <Trackpoint>[];
-      while (ptIdx < points.length) {
-        final pt = points[ptIdx];
-        if (!isLast && pt.timestamp.isAfter(meta.endTime)) {
-          break;
-        }
-        lapPoints.add(pt);
-        ptIdx++;
-      }
+      final lapPoints = partitioned[i];
 
       int hrSum = 0;
       int hrCount = 0;

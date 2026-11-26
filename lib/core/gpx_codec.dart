@@ -73,31 +73,26 @@ class GpxCodec {
         '';
     final rawType = _childText(firstTrack, 'type');
     final sportType = SportType.fromGpxType(rawType);
-    final rawCreator = root.getAttribute('creator')?.trim();
-    final deviceInfo =
-        (rawCreator != null && rawCreator.isNotEmpty) ? rawCreator : null;
+    final authorEl =
+        metadata != null ? _firstChildByLocalName(metadata, 'author') : null;
+    final authorName =
+        authorEl != null ? _childText(authorEl, 'name') : null;
+    final rootCreator = root.getAttribute('creator')?.trim();
+    final deviceInfo = (authorName != null && authorName.isNotEmpty)
+        ? authorName
+        : (rootCreator != null && rootCreator.isNotEmpty ? rootCreator : null);
 
-    double? recoveredTotalDistance;
-    for (final trk in tracks) {
-      final trkExt = _firstChildByLocalName(trk, 'extensions');
-      if (trkExt == null) continue;
-      for (final node in trkExt.descendants.whereType<XmlElement>()) {
-        if (node.localName.toLowerCase() == 'totaldistance') {
-          final dist = double.tryParse(node.innerText.trim());
-          if (dist != null && dist.isFinite && dist > 0) {
-            recoveredTotalDistance = (recoveredTotalDistance ?? 0.0) + dist;
-            break;
-          }
-        }
-      }
-    }
+    final trackTotalDistances = <double?>[
+      for (final trk in tracks) _extractTrackTotalDistance(trk),
+    ];
 
-    final rawPoints = <Trackpoint>[];
+    final rawPoints = <({int trackIndex, Trackpoint point})>[];
     var missingTimestampCount = 0;
     var zeroHrCount = 0;
     var unsupportedExtensionCount = 0;
 
-    for (final trk in tracks) {
+    for (var trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
+      final trk = tracks[trackIndex];
       for (final seg in _childrenByLocalName(trk, 'trkseg')) {
         for (final trkpt in _childrenByLocalName(seg, 'trkpt')) {
           final timeText = _childText(trkpt, 'time');
@@ -121,8 +116,9 @@ class GpxCodec {
           if (ext.droppedZeroHr) zeroHrCount++;
           if (ext.hasUnsupportedExtensions) unsupportedExtensionCount++;
 
-          rawPoints.add(
-            Trackpoint(
+          rawPoints.add((
+            trackIndex: trackIndex,
+            point: Trackpoint(
               timestamp: timestamp,
               latitude: lat,
               longitude: lon,
@@ -131,7 +127,7 @@ class GpxCodec {
               cadenceRpm: ext.cadence,
               powerWatts: ext.power,
             ),
-          );
+          ));
         }
       }
     }
@@ -158,7 +154,7 @@ class GpxCodec {
     // Check and normalize chronological order.
     var outOfOrderCount = 0;
     for (var i = 1; i < rawPoints.length; i++) {
-      if (rawPoints[i].timestamp.isBefore(rawPoints[i - 1].timestamp)) {
+      if (rawPoints[i].point.timestamp.isBefore(rawPoints[i - 1].point.timestamp)) {
         outOfOrderCount++;
       }
     }
@@ -166,7 +162,7 @@ class GpxCodec {
     final indexed = rawPoints.asMap().entries.toList();
     if (outOfOrderCount > 0) {
       indexed.sort((a, b) {
-        final cmp = a.value.timestamp.compareTo(b.value.timestamp);
+        final cmp = a.value.point.timestamp.compareTo(b.value.point.timestamp);
         return cmp != 0 ? cmp : a.key.compareTo(b.key);
       });
       diagnostics.add(
@@ -181,17 +177,20 @@ class GpxCodec {
     }
 
     // Deduplicate adjacent identical timestamps, preferring later non-null values.
-    final normalizedPoints = <Trackpoint>[];
+    final normalizedEntries = <({int trackIndex, Trackpoint point})>[];
     var duplicateCount = 0;
     for (final entry in indexed) {
-      final pt = entry.value;
-      if (normalizedPoints.isNotEmpty &&
-          normalizedPoints.last.timestamp == pt.timestamp) {
+      final item = entry.value;
+      if (normalizedEntries.isNotEmpty &&
+          normalizedEntries.last.point.timestamp == item.point.timestamp) {
         duplicateCount++;
-        final prev = normalizedPoints.removeLast();
-        normalizedPoints.add(_mergeDuplicateTrackpoints(prev, pt));
+        final prev = normalizedEntries.removeLast();
+        normalizedEntries.add((
+          trackIndex: item.trackIndex,
+          point: _mergeDuplicateTrackpoints(prev.point, item.point),
+        ));
       } else {
-        normalizedPoints.add(pt);
+        normalizedEntries.add(item);
       }
     }
 
@@ -231,13 +230,10 @@ class GpxCodec {
       );
     }
 
-    final finalPoints =
-        (recoveredTotalDistance != null && recoveredTotalDistance > 0)
-            ? SummaryCalculator.distributeDistanceRange(
-                normalizedPoints,
-                spanMeters: recoveredTotalDistance,
-              )
-            : normalizedPoints;
+    final hasTrackDistances = trackTotalDistances.any((d) => d != null);
+    final finalPoints = hasTrackDistances
+        ? _distributePerTrackDistances(normalizedEntries, trackTotalDistances)
+        : [for (final entry in normalizedEntries) entry.point];
 
     final channels = <Channel>{};
     for (final pt in finalPoints) {
@@ -272,6 +268,54 @@ class GpxCodec {
       summary: SummaryCalculator.compute(activity),
       diagnostics: diagnostics,
     );
+  }
+
+  static double? _extractTrackTotalDistance(XmlElement trk) {
+    final trkExt = _firstChildByLocalName(trk, 'extensions');
+    if (trkExt == null) return null;
+    for (final node in trkExt.descendants.whereType<XmlElement>()) {
+      if (node.localName.toLowerCase() == 'totaldistance') {
+        final dist = double.tryParse(node.innerText.trim());
+        if (dist != null && dist.isFinite && dist > 0) {
+          return dist;
+        }
+      }
+    }
+    return null;
+  }
+
+  static List<Trackpoint> _distributePerTrackDistances(
+    List<({int trackIndex, Trackpoint point})> entries,
+    List<double?> trackTotalDistances,
+  ) {
+    final result = <Trackpoint>[];
+    final usedTracks = <int>{};
+    var runningDist = 0.0;
+    Trackpoint? prevPoint;
+    var i = 0;
+
+    while (i < entries.length) {
+      final trackIndex = entries[i].trackIndex;
+      final groupPoints = <Trackpoint>[];
+      while (i < entries.length && entries[i].trackIndex == trackIndex) {
+        groupPoints.add(entries[i].point);
+        i++;
+      }
+
+      final span =
+          usedTracks.add(trackIndex) ? trackTotalDistances[trackIndex] : null;
+      final scaled = SummaryCalculator.distributeDistanceRange(
+        groupPoints,
+        spanMeters: span,
+        startDistanceMeters: runningDist,
+        precedingPoint: prevPoint,
+      );
+      result.addAll(scaled);
+      runningDist = scaled.last.cumulativeDistanceMeters ?? runningDist;
+      prevPoint = groupPoints.last;
+    }
+
+    return result;
   }
 
   static Trackpoint _mergeDuplicateTrackpoints(Trackpoint prev, Trackpoint next) {

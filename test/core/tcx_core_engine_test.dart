@@ -636,5 +636,40 @@ void main() {
       expect(parsed.activity.laps[1].distanceMeters, closeTo(1030.0, 0.01));
       expect(parsed.summary.gpsDistanceMeters, closeTo(2050.0, 0.01));
     });
+
+    test('prefers TrainingCenterDatabase Author Name over root creator when Activity Creator is absent', () {
+      const authorTcx = '''<?xml version="1.0" encoding="UTF-8"?>
+<TrainingCenterDatabase
+  creator="Health"
+  xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Activities>
+    <Activity Sport="Running">
+      <Id>2026-11-20T06:00:00Z</Id>
+      <Lap StartTime="2026-11-20T06:00:00Z">
+        <TotalTimeSeconds>60.0</TotalTimeSeconds>
+        <DistanceMeters>200.0</DistanceMeters>
+        <Track>
+          <Trackpoint>
+            <Time>2026-11-20T06:00:00Z</Time>
+            <Position><LatitudeDegrees>14.600000</LatitudeDegrees><LongitudeDegrees>120.984000</LongitudeDegrees></Position>
+          </Trackpoint>
+          <Trackpoint>
+            <Time>2026-11-20T06:01:00Z</Time>
+            <Position><LatitudeDegrees>14.601800</LatitudeDegrees><LongitudeDegrees>120.984000</LongitudeDegrees></Position>
+          </Trackpoint>
+        </Track>
+      </Lap>
+    </Activity>
+  </Activities>
+  <Author xsi:type="Application_t">
+    <Name>Huawei Health App</Name>
+  </Author>
+</TrainingCenterDatabase>''';
+
+      final parsed = CoreEngine.parseTcx(_utf8(authorTcx));
+      expect(parsed.activity.deviceInfo, 'Huawei Health App');
+      expect(parsed.summary.gpsDistanceMeters, closeTo(200.0, 0.01));
+    });
   });
 }
