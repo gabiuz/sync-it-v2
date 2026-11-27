@@ -120,7 +120,7 @@ String sanitizeExportFileName(
   if (trimmed.isEmpty) return fallback;
 
   final withoutExt = trimmed.replaceFirst(
-    RegExp(r'\.(fit|gpx|tcx)$', caseSensitive: false),
+    RegExp(r'\.(fit|gpx|tcx|kml)$', caseSensitive: false),
     '',
   );
   final safeStem = withoutExt

@@ -6,7 +6,7 @@ final class IncomingFilesCoordinator: NSObject, FlutterStreamHandler {
 
   private let methodChannelName = "com.gabiuz.gpx_lab/incoming_files"
   private let eventChannelName = "com.gabiuz.gpx_lab/incoming_files_events"
-  private let supportedExtensions: Set<String> = ["gpx", "tcx", "fit"]
+  private let supportedExtensions: Set<String> = ["gpx", "tcx", "fit", "kml"]
 
   private var initialBatch: [String: Any]?
   private var eventSink: FlutterEventSink?
@@ -66,7 +66,7 @@ final class IncomingFilesCoordinator: NSObject, FlutterStreamHandler {
       let ext = url.pathExtension.lowercased()
       if !ext.isEmpty && !supportedExtensions.contains(ext) {
         errors.append(
-          "Unsupported file type \"\(fileName)\". GPX Lab only supports .gpx, .tcx, and .fit files."
+          "Unsupported file type \"\(fileName)\". GPX Lab only supports .gpx, .tcx, .fit, and .kml files."
         )
         continue
       }

@@ -317,7 +317,9 @@ void main() {
       expect(find.byKey(const Key('import-source-button')), findsOneWidget);
       expect(find.textContaining('Unsupported file type'), findsOneWidget);
       expect(
-        find.textContaining('GPX Lab only supports .gpx, .tcx, and .fit files.'),
+        find.textContaining(
+          'GPX Lab only supports .gpx, .tcx, .fit, and .kml files.',
+        ),
         findsOneWidget,
       );
 

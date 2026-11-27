@@ -125,10 +125,10 @@ class _GpxLabShellState extends State<_GpxLabShell> {
     final dotIndex = lower.lastIndexOf('.');
     if (dotIndex != -1) {
       final ext = lower.substring(dotIndex);
-      if (ext != '.gpx' && ext != '.tcx' && ext != '.fit') {
+      if (ext != '.gpx' && ext != '.tcx' && ext != '.fit' && ext != '.kml') {
         throw ActivityParseException(
           'Unsupported file type "${picked.fileName}". '
-          'GPX Lab only supports .gpx, .tcx, and .fit files.',
+          'GPX Lab only supports .gpx, .tcx, .fit, and .kml files.',
         );
       }
     }
@@ -272,14 +272,20 @@ class _GpxLabShellState extends State<_GpxLabShell> {
   }
 
   Future<ParseResult> _parsePickedFile(PickedSourceFile picked) {
-    if (_isFitSource(picked.fileName, picked.bytes)) {
+    if (_isFitSource(picked)) {
       return CoreEngine.parseFitInIsolate(
         picked.bytes,
         fileName: picked.fileName,
       );
     }
-    if (_isTcxSource(picked.fileName, picked.bytes)) {
+    if (_isTcxSource(picked)) {
       return CoreEngine.parseTcxInIsolate(
+        picked.bytes,
+        fileName: picked.fileName,
+      );
+    }
+    if (_isKmlSource(picked)) {
+      return CoreEngine.parseKmlInIsolate(
         picked.bytes,
         fileName: picked.fileName,
       );
@@ -470,8 +476,9 @@ class _GpxLabShellState extends State<_GpxLabShell> {
     }
   }
 
-  static bool _isFitSource(String fileName, List<int> bytes) {
-    if (fileName.toLowerCase().endsWith('.fit')) return true;
+  static bool _isFitSource(PickedSourceFile file) {
+    if (file.fileName.toLowerCase().endsWith('.fit')) return true;
+    final bytes = file.bytes;
     return bytes.length >= 12 &&
         bytes[8] == 0x2E &&
         bytes[9] == 0x46 &&
@@ -479,11 +486,22 @@ class _GpxLabShellState extends State<_GpxLabShell> {
         bytes[11] == 0x54;
   }
 
-  static bool _isTcxSource(String fileName, List<int> bytes) {
-    if (fileName.toLowerCase().endsWith('.tcx')) return true;
+  static bool _isTcxSource(PickedSourceFile file) {
+    if (file.fileName.toLowerCase().endsWith('.tcx')) return true;
+    final bytes = file.bytes;
     final prefixLen = bytes.length < 512 ? bytes.length : 512;
     final head = utf8.decode(bytes.sublist(0, prefixLen), allowMalformed: true);
     return head.contains('<TrainingCenterDatabase');
+  }
+
+  static bool _isKmlSource(PickedSourceFile file) {
+    if (file.fileName.toLowerCase().endsWith('.kml')) return true;
+    final bytes = file.bytes;
+    final prefixLen = bytes.length < 1024 ? bytes.length : 1024;
+    final head = utf8.decode(bytes.sublist(0, prefixLen), allowMalformed: true);
+    return RegExp(
+      r'<kml[\s>]|http://www\.opengis\.net/kml/|http://earth\.google\.com/kml/',
+    ).hasMatch(head);
   }
 
   @override

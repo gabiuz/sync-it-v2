@@ -5,6 +5,7 @@ import 'channel_blender.dart';
 import 'display_geometry.dart';
 import 'fit_codec.dart';
 import 'gpx_codec.dart';
+import 'kml_codec.dart';
 import 'models.dart';
 import 'sequential_stitcher.dart';
 import 'summary_calculator.dart';
@@ -34,6 +35,12 @@ class CoreEngine {
     return TcxCodec.parse(bytes, fileName: fileName);
   }
 
+  /// Parses KML [bytes] into a canonical [Activity], [ActivitySummary], and
+  /// defensive-parsing [Diagnostic]s.
+  static ParseResult parseKml(Uint8List bytes, {String? fileName}) {
+    return KmlCodec.parse(bytes, fileName: fileName);
+  }
+
   /// Applies [edit] to [activity] and serializes a clean GPX Export File.
   static ExportResult exportGpx(Activity activity, ActivityEdit edit) {
     return GpxCodec.export(activity, edit);
@@ -47,6 +54,11 @@ class CoreEngine {
   /// Applies [edit] to [activity] and serializes a clean TCX Export File.
   static ExportResult exportTcx(Activity activity, ActivityEdit edit) {
     return TcxCodec.export(activity, edit);
+  }
+
+  /// Applies [edit] to [activity] and serializes a clean KML Export File.
+  static ExportResult exportKml(Activity activity, ActivityEdit edit) {
+    return KmlCodec.export(activity, edit);
   }
 
   /// Runs [parseGpx] in a background Dart isolate.
@@ -73,6 +85,14 @@ class CoreEngine {
     return Isolate.run(() => parseTcx(bytes, fileName: fileName));
   }
 
+  /// Runs [parseKml] in a background Dart isolate.
+  static Future<ParseResult> parseKmlInIsolate(
+    Uint8List bytes, {
+    String? fileName,
+  }) {
+    return Isolate.run(() => parseKml(bytes, fileName: fileName));
+  }
+
   /// Runs [exportGpx] in a background Dart isolate.
   static Future<ExportResult> exportGpxInIsolate(
     Activity activity,
@@ -95,6 +115,14 @@ class CoreEngine {
     ActivityEdit edit,
   ) {
     return Isolate.run(() => exportTcx(activity, edit));
+  }
+
+  /// Runs [exportKml] in a background Dart isolate.
+  static Future<ExportResult> exportKmlInIsolate(
+    Activity activity,
+    ActivityEdit edit,
+  ) {
+    return Isolate.run(() => exportKml(activity, edit));
   }
 
   /// Builds downsampled display geometry for map and Channel charts without

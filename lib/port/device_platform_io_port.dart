@@ -23,7 +23,7 @@ class DevicePlatformIoPort implements PlatformIoPort {
   Future<PickedSourceFile?> pickSourceFile() async {
     final file = await FilePicker.pickFile(
       type: FileType.custom,
-      allowedExtensions: const ['gpx', 'tcx', 'fit'],
+      allowedExtensions: const ['gpx', 'tcx', 'fit', 'kml'],
     );
     if (file == null) return null;
     final bytes = await file.readAsBytes();
@@ -37,7 +37,7 @@ class DevicePlatformIoPort implements PlatformIoPort {
   Future<List<PickedSourceFile>> pickMultipleSourceFiles() async {
     final files = await FilePicker.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['gpx', 'tcx', 'fit'],
+      allowedExtensions: const ['gpx', 'tcx', 'fit', 'kml'],
     );
     if (files.isEmpty) return const [];
     final picked = <PickedSourceFile>[];
@@ -167,6 +167,9 @@ class DevicePlatformIoPort implements PlatformIoPort {
     }
     if (lower.endsWith('.tcx')) {
       return 'application/vnd.garmin.tcx+xml';
+    }
+    if (lower.endsWith('.kml')) {
+      return 'application/vnd.google-earth.kml+xml';
     }
     return 'application/gpx+xml';
   }
