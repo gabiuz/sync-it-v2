@@ -115,6 +115,7 @@ void main() {
           ChartSample(distanceMeters: 0, elapsedSeconds: 0, value: 300),
           ChartSample(distanceMeters: 500, elapsedSeconds: 150, value: 285),
         ],
+        sourceTrackpointCount: 2,
       );
 
       for (final theme in [GpxLabTheme.light(), GpxLabTheme.dark()]) {
@@ -129,6 +130,7 @@ void main() {
             ),
           ),
         );
+        await tester.pumpAndSettle();
 
         final hrIcon = tester.widget<Icon>(
           find.descendant(

@@ -87,9 +87,27 @@ class XmlTrackCodecHelpers {
     required int zeroHrCount,
     required int unsupportedExtensionCount,
   }) {
+    final tagged = [for (final pt in rawPoints) (tag: 0, point: pt)];
+    final normalized = normalizeTaggedTrackpoints<int>(
+      tagged,
+      diagnostics: diagnostics,
+      zeroHrCount: zeroHrCount,
+      unsupportedExtensionCount: unsupportedExtensionCount,
+    );
+    return [for (final entry in normalized) entry.point];
+  }
+
+  /// Tag-preserving variant of [normalizeTrackpoints] for codecs that track
+  /// per-track grouping alongside each [Trackpoint].
+  static List<({T tag, Trackpoint point})> normalizeTaggedTrackpoints<T>(
+    List<({T tag, Trackpoint point})> rawPoints, {
+    required List<Diagnostic> diagnostics,
+    required int zeroHrCount,
+    required int unsupportedExtensionCount,
+  }) {
     var outOfOrderCount = 0;
     for (var i = 1; i < rawPoints.length; i++) {
-      if (rawPoints[i].timestamp.isBefore(rawPoints[i - 1].timestamp)) {
+      if (rawPoints[i].point.timestamp.isBefore(rawPoints[i - 1].point.timestamp)) {
         outOfOrderCount++;
       }
     }
@@ -97,7 +115,7 @@ class XmlTrackCodecHelpers {
     final indexed = rawPoints.asMap().entries.toList();
     if (outOfOrderCount > 0) {
       indexed.sort((a, b) {
-        final cmp = a.value.timestamp.compareTo(b.value.timestamp);
+        final cmp = a.value.point.timestamp.compareTo(b.value.point.timestamp);
         return cmp != 0 ? cmp : a.key.compareTo(b.key);
       });
       diagnostics.add(
@@ -112,17 +130,20 @@ class XmlTrackCodecHelpers {
     }
 
     // Deduplicate adjacent identical timestamps, preferring later non-null values.
-    final normalizedPoints = <Trackpoint>[];
+    final normalizedEntries = <({T tag, Trackpoint point})>[];
     var duplicateCount = 0;
     for (final entry in indexed) {
-      final pt = entry.value;
-      if (normalizedPoints.isNotEmpty &&
-          normalizedPoints.last.timestamp == pt.timestamp) {
+      final item = entry.value;
+      if (normalizedEntries.isNotEmpty &&
+          normalizedEntries.last.point.timestamp == item.point.timestamp) {
         duplicateCount++;
-        final prev = normalizedPoints.removeLast();
-        normalizedPoints.add(mergeDuplicateTrackpoints(prev, pt));
+        final prev = normalizedEntries.removeLast();
+        normalizedEntries.add((
+          tag: item.tag,
+          point: mergeDuplicateTrackpoints(prev.point, item.point),
+        ));
       } else {
-        normalizedPoints.add(pt);
+        normalizedEntries.add(item);
       }
     }
 
@@ -162,7 +183,7 @@ class XmlTrackCodecHelpers {
       );
     }
 
-    return normalizedPoints;
+    return normalizedEntries;
   }
 
   static Trackpoint mergeDuplicateTrackpoints(

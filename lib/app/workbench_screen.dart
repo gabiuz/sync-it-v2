@@ -250,7 +250,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     });
   }
 
-  void _applyNudgeDistanceOverride(double targetMeters) {
+  void _setDistanceOverride(double targetMeters) {
     setState(() {
       _distanceOverrideMeters = targetMeters;
       _distanceOverrideController.text = formatDistanceInput(
@@ -463,7 +463,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                   summary: effectiveSummary,
                   distanceDiagnostics: distanceDiagnostics,
                   distanceOverrideMeters: _distanceOverrideMeters,
-                  onApplyNudge: _applyNudgeDistanceOverride,
+                  onSetDistanceOverride: _setDistanceOverride,
+                  onClearDistanceOverride: _clearDistanceOverride,
                   sourceFileName: widget.sourceFileName,
                   currentTitle: _currentEdit.title ?? _activeResult.activity.title,
                   currentSportType: _sportType,
@@ -613,7 +614,8 @@ class _OverviewTab extends StatelessWidget {
     required this.summary,
     required this.distanceDiagnostics,
     required this.distanceOverrideMeters,
-    required this.onApplyNudge,
+    required this.onSetDistanceOverride,
+    required this.onClearDistanceOverride,
     required this.sourceFileName,
     required this.currentTitle,
     required this.currentSportType,
@@ -626,7 +628,8 @@ class _OverviewTab extends StatelessWidget {
   final ActivitySummary summary;
   final DistanceDiagnostics distanceDiagnostics;
   final double? distanceOverrideMeters;
-  final ValueChanged<double> onApplyNudge;
+  final ValueChanged<double> onSetDistanceOverride;
+  final VoidCallback onClearDistanceOverride;
   final String sourceFileName;
   final String currentTitle;
   final SportType currentSportType;
@@ -736,7 +739,8 @@ class _OverviewTab extends StatelessWidget {
           diagnostics: distanceDiagnostics,
           distanceOverrideMeters: distanceOverrideMeters,
           unitSystem: unitSystem,
-          onApplyNudge: onApplyNudge,
+          onSetDistanceOverride: onSetDistanceOverride,
+          onClearDistanceOverride: onClearDistanceOverride,
         ),
         if (displayGeometry != null) ...[
           const SizedBox(height: 12),
@@ -762,13 +766,32 @@ class _StravaTaxCard extends StatelessWidget {
     required this.diagnostics,
     required this.distanceOverrideMeters,
     required this.unitSystem,
-    required this.onApplyNudge,
+    required this.onSetDistanceOverride,
+    required this.onClearDistanceOverride,
   });
 
   final DistanceDiagnostics diagnostics;
   final double? distanceOverrideMeters;
   final UnitSystem unitSystem;
-  final ValueChanged<double> onApplyNudge;
+  final ValueChanged<double> onSetDistanceOverride;
+  final VoidCallback onClearDistanceOverride;
+
+  Future<void> _openQuickOverrideDialog(BuildContext context) async {
+    final result = await showDialog<_QuickOverrideDialogResult>(
+      context: context,
+      builder: (_) => _QuickDistanceOverrideDialog(
+        initialMeters: distanceOverrideMeters,
+        fallbackHintMeters: diagnostics.effectiveDistanceMeters,
+        unitSystem: unitSystem,
+      ),
+    );
+    if (result == null) return;
+    if (result.cleared) {
+      onClearDistanceOverride();
+    } else if (result.meters != null) {
+      onSetDistanceOverride(result.meters!);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -789,6 +812,20 @@ class _StravaTaxCard extends StatelessWidget {
     final taxText = diagnostics.stravaTaxMeters != null
         ? '${diagnostics.stravaTaxMeters! >= 0 ? '+' : ''}${formatPreciseDistance(diagnostics.stravaTaxMeters!, units: unitSystem)}'
         : '—';
+
+    final lacksRecordedDistance = diagnostics.recordedDistanceMeters == null;
+    final hasStravaTaxDiscrepancy =
+        diagnostics.stravaTaxMeters != null &&
+        diagnostics.stravaTaxMeters!.abs() >= 0.5;
+    final showQuickOverride =
+        lacksRecordedDistance ||
+        hasStravaTaxDiscrepancy ||
+        distanceOverrideMeters != null;
+    final reminderText = distanceOverrideMeters != null
+        ? 'Export as FIT or TCX so Strava honors your Distance Override (GPX drops distance).'
+        : lacksRecordedDistance
+            ? 'This Source File lacks recorded distance. Set a Distance Override and export as FIT or TCX so Strava honors it.'
+            : 'Recorded distance differs from raw GPS. Export as FIT or TCX so Strava honors recorded distance or any Distance Override.';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -822,6 +859,43 @@ class _StravaTaxCard extends StatelessWidget {
                   value: formatDistance(
                     distanceOverrideMeters!,
                     units: unitSystem,
+                  ),
+                ),
+              ],
+              if (showQuickOverride) ...[
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            size: 18,
+                            color: colors.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              reminderText,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        key: const Key('overview-set-distance-override-button'),
+                        onPressed: () => _openQuickOverrideDialog(context),
+                        icon: const Icon(Icons.straighten),
+                        label: const Text('Set Distance Override'),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -869,7 +943,7 @@ class _StravaTaxCard extends StatelessWidget {
                   FilledButton.tonalIcon(
                     key: const Key('nudge-distance-override-button'),
                     onPressed: () =>
-                        onApplyNudge(diagnostics.nudgeTargetMeters!),
+                        onSetDistanceOverride(diagnostics.nudgeTargetMeters!),
                     icon: const Icon(Icons.auto_fix_high),
                     label: Text(
                       'Nudge to ${diagnostics.nudgeTargetDisplayValue!.toStringAsFixed(2)} $unitSuffix',
@@ -880,6 +954,128 @@ class _StravaTaxCard extends StatelessWidget {
             ),
           ),
         ],
+      ],
+    );
+  }
+}
+
+class _QuickOverrideDialogResult {
+  const _QuickOverrideDialogResult({this.meters, this.cleared = false});
+
+  final double? meters;
+  final bool cleared;
+}
+
+class _QuickDistanceOverrideDialog extends StatefulWidget {
+  const _QuickDistanceOverrideDialog({
+    required this.initialMeters,
+    required this.fallbackHintMeters,
+    required this.unitSystem,
+  });
+
+  final double? initialMeters;
+  final double fallbackHintMeters;
+  final UnitSystem unitSystem;
+
+  @override
+  State<_QuickDistanceOverrideDialog> createState() =>
+      _QuickDistanceOverrideDialogState();
+}
+
+class _QuickDistanceOverrideDialogState
+    extends State<_QuickDistanceOverrideDialog> {
+  late final TextEditingController _controller;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.initialMeters != null
+          ? formatDistanceInput(widget.initialMeters!, units: widget.unitSystem)
+          : '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final trimmed = _controller.text.trim();
+    if (trimmed.isEmpty && widget.initialMeters != null) {
+      Navigator.of(context).pop(const _QuickOverrideDialogResult(cleared: true));
+      return;
+    }
+    final parsed = parseDistanceOverrideMeters(
+      trimmed,
+      units: widget.unitSystem,
+    );
+    if (parsed == null) {
+      setState(() {
+        _errorText =
+            'Enter a positive distance in ${distanceUnitLabel(widget.unitSystem)}.';
+      });
+      return;
+    }
+    Navigator.of(context).pop(_QuickOverrideDialogResult(meters: parsed));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final unitSuffix = distanceUnitLabel(widget.unitSystem);
+    return AlertDialog(
+      key: const Key('overview-distance-override-dialog'),
+      title: const Text('Set Distance Override'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Export as FIT or TCX so Strava honors your Distance Override (GPX drops distance).',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            key: const Key('overview-distance-override-field'),
+            controller: _controller,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onSubmitted: (_) => _submit(),
+            decoration: InputDecoration(
+              labelText: 'Target Distance ($unitSuffix)',
+              hintText: formatDistanceInput(
+                widget.fallbackHintMeters,
+                units: widget.unitSystem,
+              ),
+              errorText: _errorText,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        if (widget.initialMeters != null)
+          TextButton(
+            key: const Key('overview-clear-distance-override-button'),
+            onPressed: () => Navigator.of(context).pop(
+              const _QuickOverrideDialogResult(cleared: true),
+            ),
+            child: const Text('Clear'),
+          ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          key: const Key('overview-apply-distance-override-button'),
+          onPressed: _submit,
+          child: const Text('Apply'),
+        ),
       ],
     );
   }

@@ -151,5 +151,42 @@ void main() {
           .fold<double>(0.0, (sum, l) => sum + (l.distanceMeters ?? 0.0));
       expect(tcxLapSum, closeTo(10000.0, 0.02));
     });
+
+    test('analyzeDistance and summary computation prefer recorded Lap/Trackpoint distance over GPS Haversine', () {
+      final t0 = DateTime.utc(2026, 11, 20, 6, 0, 0);
+      final t1 = DateTime.utc(2026, 11, 20, 6, 42, 0);
+
+      // GPS Haversine is ~7101.58 m while Lap-level recorded distance is 7150.0 m.
+      final lapOnlyActivity = Activity(
+        title: 'Outdoor run',
+        description: '',
+        sportType: SportType.running,
+        trackpoints: [
+          Trackpoint(
+            timestamp: t0,
+            latitude: 14.600000,
+            longitude: 120.984000,
+          ),
+          Trackpoint(
+            timestamp: t1,
+            latitude: 14.663866,
+            longitude: 120.984000,
+          ),
+        ],
+        laps: [
+          Lap(startTime: t0, endTime: t1, distanceMeters: 7150.0),
+        ],
+        availableChannels: const {Channel.gps},
+      );
+
+      final diag = CoreEngine.analyzeDistance(lapOnlyActivity, isImperial: false);
+      expect(diag.recordedDistanceMeters, closeTo(7150.0, 0.01));
+      expect(diag.gpsDistanceMeters, closeTo(7101.58, 0.5));
+      expect(diag.effectiveDistanceMeters, closeTo(7150.0, 0.01));
+      expect(
+        diag.stravaTaxMeters,
+        closeTo(7150.0 - diag.gpsDistanceMeters, 0.01),
+      );
+    });
   });
 }

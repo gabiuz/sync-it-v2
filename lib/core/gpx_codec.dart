@@ -54,14 +54,29 @@ class GpxCodec {
         '';
     final rawType = XmlTrackCodecHelpers.childText(firstTrack, 'type');
     final sportType = SportType.fromGpxType(rawType);
+    final authorEl = metadata != null
+        ? XmlTrackCodecHelpers.firstChildByLocalName(metadata, 'author')
+        : null;
+    final authorName =
+        authorEl != null ? XmlTrackCodecHelpers.childText(authorEl, 'name') : null;
+    final rootCreator = root.getAttribute('creator')?.trim();
+    final deviceInfo = (authorName != null && authorName.isNotEmpty)
+        ? authorName
+        : (rootCreator != null && rootCreator.isNotEmpty ? rootCreator : null);
 
-    final rawPoints = <Trackpoint>[];
+    final trackTotalDistances = <double?>[
+      for (final trk in tracks) _extractTrackTotalDistance(trk),
+    ];
+
+    final rawPoints = <({int tag, Trackpoint point})>[];
     var missingTimestampCount = 0;
     var zeroHrCount = 0;
     var unsupportedExtensionCount = 0;
 
-    for (final trk in tracks) {
-      for (final seg in XmlTrackCodecHelpers.childrenByLocalName(trk, 'trkseg')) {
+    for (var trackIndex = 0; trackIndex < tracks.length; trackIndex++) {
+      final trk = tracks[trackIndex];
+      for (final seg
+          in XmlTrackCodecHelpers.childrenByLocalName(trk, 'trkseg')) {
         for (final trkpt
             in XmlTrackCodecHelpers.childrenByLocalName(seg, 'trkpt')) {
           final timeText = XmlTrackCodecHelpers.childText(trkpt, 'time');
@@ -85,8 +100,9 @@ class GpxCodec {
           if (ext.droppedZeroHr) zeroHrCount++;
           if (ext.hasUnsupportedExtensions) unsupportedExtensionCount++;
 
-          rawPoints.add(
-            Trackpoint(
+          rawPoints.add((
+            tag: trackIndex,
+            point: Trackpoint(
               timestamp: timestamp,
               latitude: lat,
               longitude: lon,
@@ -95,7 +111,7 @@ class GpxCodec {
               cadenceRpm: ext.cadence,
               powerWatts: ext.power,
             ),
-          );
+          ));
         }
       }
     }
@@ -118,27 +134,35 @@ class GpxCodec {
     }
 
     final diagnostics = <Diagnostic>[];
-    final normalizedPoints = XmlTrackCodecHelpers.normalizeTrackpoints(
+    final normalizedEntries =
+        XmlTrackCodecHelpers.normalizeTaggedTrackpoints<int>(
       rawPoints,
       diagnostics: diagnostics,
       zeroHrCount: zeroHrCount,
       unsupportedExtensionCount: unsupportedExtensionCount,
     );
-    final channels =
-        XmlTrackCodecHelpers.detectAvailableChannels(normalizedPoints);
+
+    final hasTrackDistances = trackTotalDistances.any((d) => d != null);
+    final finalPoints = hasTrackDistances
+        ? _distributePerTrackDistances(normalizedEntries, trackTotalDistances)
+        : [for (final entry in normalizedEntries) entry.point];
+
+    final channels = XmlTrackCodecHelpers.detectAvailableChannels(finalPoints);
 
     final activity = Activity(
       title: rawTitle,
       description: rawDesc,
       sportType: sportType,
-      trackpoints: normalizedPoints,
+      trackpoints: finalPoints,
       laps: [
         Lap(
-          startTime: normalizedPoints.first.timestamp,
-          endTime: normalizedPoints.last.timestamp,
+          startTime: finalPoints.first.timestamp,
+          endTime: finalPoints.last.timestamp,
+          distanceMeters: finalPoints.last.cumulativeDistanceMeters,
         ),
       ],
       availableChannels: channels,
+      deviceInfo: deviceInfo,
     );
 
     return ParseResult(
@@ -148,6 +172,53 @@ class GpxCodec {
     );
   }
 
+  static double? _extractTrackTotalDistance(XmlElement trk) {
+    final trkExt = XmlTrackCodecHelpers.firstChildByLocalName(trk, 'extensions');
+    if (trkExt == null) return null;
+    for (final node in trkExt.descendants.whereType<XmlElement>()) {
+      if (node.localName.toLowerCase() == 'totaldistance') {
+        final dist = double.tryParse(node.innerText.trim());
+        if (dist != null && dist.isFinite && dist > 0) {
+          return dist;
+        }
+      }
+    }
+    return null;
+  }
+
+  static List<Trackpoint> _distributePerTrackDistances(
+    List<({int tag, Trackpoint point})> entries,
+    List<double?> trackTotalDistances,
+  ) {
+    final result = <Trackpoint>[];
+    final usedTracks = <int>{};
+    var runningDist = 0.0;
+    Trackpoint? prevPoint;
+    var i = 0;
+
+    while (i < entries.length) {
+      final trackIndex = entries[i].tag;
+      final groupPoints = <Trackpoint>[];
+      while (i < entries.length && entries[i].tag == trackIndex) {
+        groupPoints.add(entries[i].point);
+        i++;
+      }
+
+      final span =
+          usedTracks.add(trackIndex) ? trackTotalDistances[trackIndex] : null;
+      final scaled = SummaryCalculator.distributeDistanceRange(
+        groupPoints,
+        spanMeters: span,
+        startDistanceMeters: runningDist,
+        precedingPoint: prevPoint,
+      );
+      result.addAll(scaled);
+      runningDist = scaled.last.cumulativeDistanceMeters ?? runningDist;
+      prevPoint = groupPoints.last;
+    }
+
+    return result;
+  }
   static ExportResult export(Activity activity, ActivityEdit edit) {
     if (edit.strippedChannels.contains(StrippableChannel.gps)) {
       throw StateError(
