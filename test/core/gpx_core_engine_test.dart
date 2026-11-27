@@ -220,5 +220,166 @@ void main() {
         ),
       );
     });
+
+    test('recovers Huawei Health GPX creator, empty metadata time, Outdoor run sport, track-extension totalDistance, and preserves on FIT/TCX export', () {
+      const huaweiGpx = '''<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Health"
+  xmlns="http://www.topografix.com/GPX/1/1"
+  xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1"
+  xmlns:hw="http://www.huawei.com/gpx/extensions">
+  <metadata>
+    <name>Outdoor run</name>
+    <time/>
+  </metadata>
+  <trk>
+    <name>Outdoor run</name>
+    <type>Outdoor run</type>
+    <extensions>
+      <hw:totalDistance>7150.0</hw:totalDistance>
+    </extensions>
+    <trkseg>
+      <trkpt lat="14.600000" lon="120.984000">
+        <ele>12.0</ele>
+        <time>2026-11-20T06:00:00Z</time>
+        <extensions>
+          <gpxtpx:TrackPointExtension>
+            <gpxtpx:hr>142</gpxtpx:hr>
+          </gpxtpx:TrackPointExtension>
+        </extensions>
+      </trkpt>
+      <trkpt lat="14.621289" lon="120.984000">
+        <ele>16.0</ele>
+        <time>2026-11-20T06:14:00Z</time>
+        <extensions>
+          <gpxtpx:TrackPointExtension>
+            <gpxtpx:hr>154</gpxtpx:hr>
+          </gpxtpx:TrackPointExtension>
+        </extensions>
+      </trkpt>
+      <trkpt lat="14.642577" lon="120.984000">
+        <ele>14.0</ele>
+        <time>2026-11-20T06:28:00Z</time>
+        <extensions>
+          <gpxtpx:TrackPointExtension>
+            <gpxtpx:hr>160</gpxtpx:hr>
+          </gpxtpx:TrackPointExtension>
+        </extensions>
+      </trkpt>
+      <trkpt lat="14.663866" lon="120.984000">
+        <ele>18.0</ele>
+        <time>2026-11-20T06:42:00Z</time>
+        <extensions>
+          <gpxtpx:TrackPointExtension>
+            <gpxtpx:hr>165</gpxtpx:hr>
+          </gpxtpx:TrackPointExtension>
+        </extensions>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>''';
+
+      final parsed = CoreEngine.parseGpx(
+        _utf8(huaweiGpx),
+        fileName: 'huawei_outdoor_run.gpx',
+      );
+
+      expect(parsed.diagnostics, isEmpty);
+      expect(parsed.activity.deviceInfo, 'Health');
+      expect(parsed.activity.sportType, SportType.running);
+      expect(parsed.activity.availableChannels, contains(Channel.distance));
+
+      final pts = parsed.activity.trackpoints;
+      expect(pts, hasLength(4));
+      expect(pts[0].cumulativeDistanceMeters, closeTo(0.0, 0.01));
+      expect(pts[1].cumulativeDistanceMeters, closeTo(7150.0 / 3.0, 0.5));
+      expect(pts[2].cumulativeDistanceMeters, closeTo(7150.0 * 2.0 / 3.0, 0.5));
+      expect(pts[3].cumulativeDistanceMeters, closeTo(7150.0, 0.01));
+
+      expect(parsed.activity.laps.single.distanceMeters, closeTo(7150.0, 0.01));
+      expect(parsed.summary.gpsDistanceMeters, closeTo(7150.0, 0.01));
+      expect(parsed.summary.avgPaceSecondsPerKm, closeTo(2520.0 / 7.15, 0.05));
+
+      final diag = CoreEngine.analyzeDistance(
+        parsed.activity,
+        isImperial: false,
+      );
+      expect(diag.recordedDistanceMeters, closeTo(7150.0, 0.01));
+      expect(diag.gpsDistanceMeters, closeTo(7101.58, 0.5));
+      expect(diag.effectiveDistanceMeters, closeTo(7150.0, 0.01));
+      expect(
+        diag.stravaTaxMeters,
+        closeTo(7150.0 - diag.gpsDistanceMeters, 0.01),
+      );
+
+      // FIT export preserves recovered total distance and creator without manual override
+      final fitExport = CoreEngine.exportFit(
+        parsed.activity,
+        const ActivityEdit(),
+      );
+      final fitReparsed = CoreEngine.parseFit(fitExport.bytes);
+      expect(fitReparsed.activity.deviceInfo, 'Health');
+      expect(
+        fitReparsed.activity.trackpoints.last.cumulativeDistanceMeters,
+        closeTo(7150.0, 0.05),
+      );
+      expect(
+        fitReparsed.activity.laps.single.distanceMeters,
+        closeTo(7150.0, 0.05),
+      );
+      expect(fitReparsed.summary.gpsDistanceMeters, closeTo(7150.0, 0.05));
+
+      // TCX export preserves recovered total distance and creator without manual override
+      final tcxExport = CoreEngine.exportTcx(
+        parsed.activity,
+        const ActivityEdit(),
+      );
+      final tcxReparsed = CoreEngine.parseTcx(tcxExport.bytes);
+      expect(tcxReparsed.activity.deviceInfo, 'Health');
+      expect(
+        tcxReparsed.activity.trackpoints.last.cumulativeDistanceMeters,
+        closeTo(7150.0, 0.05),
+      );
+      expect(
+        tcxReparsed.activity.laps.single.distanceMeters,
+        closeTo(7150.0, 0.05),
+      );
+      expect(tcxReparsed.summary.gpsDistanceMeters, closeTo(7150.0, 0.05));
+    });
+
+    test('distributes per-trk totalDistance across each track and prefers metadata author name over root creator', () {
+      const multiTrackGpx = '''<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="RootApp"
+  xmlns="http://www.topografix.com/GPX/1/1"
+  xmlns:hw="http://www.huawei.com/gpx/extensions">
+  <metadata>
+    <name>Multi-Track Run</name>
+    <author><name>HUAWEI WATCH GT 4</name></author>
+  </metadata>
+  <trk>
+    <type>Outdoor run</type>
+    <extensions><hw:totalDistance>1050.0</hw:totalDistance></extensions>
+    <trkseg>
+      <trkpt lat="14.600000" lon="120.984000"><time>2026-11-20T06:00:00Z</time></trkpt>
+      <trkpt lat="14.609000" lon="120.984000"><time>2026-11-20T06:05:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+  <trk>
+    <type>Outdoor run</type>
+    <extensions><hw:totalDistance>2100.0</hw:totalDistance></extensions>
+    <trkseg>
+      <trkpt lat="14.618000" lon="120.984000"><time>2026-11-20T06:10:00Z</time></trkpt>
+      <trkpt lat="14.627000" lon="120.984000"><time>2026-11-20T06:15:00Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>''';
+
+      final parsed = CoreEngine.parseGpx(_utf8(multiTrackGpx));
+      expect(parsed.activity.deviceInfo, 'HUAWEI WATCH GT 4');
+      expect(parsed.activity.trackpoints[0].cumulativeDistanceMeters, closeTo(0.0, 0.01));
+      expect(parsed.activity.trackpoints[1].cumulativeDistanceMeters, closeTo(1050.0, 0.01));
+      expect(parsed.activity.trackpoints[2].cumulativeDistanceMeters, closeTo(2100.0, 0.5));
+      expect(parsed.activity.trackpoints[3].cumulativeDistanceMeters, closeTo(3150.0, 0.01));
+      expect(parsed.summary.gpsDistanceMeters, closeTo(3150.0, 0.01));
+    });
   });
 }

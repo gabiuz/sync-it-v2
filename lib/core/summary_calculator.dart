@@ -65,9 +65,11 @@ class SummaryCalculator {
       }
     }
 
-    final effectiveDistance = gpsDistance > 0
-        ? gpsDistance
-        : (points.last.cumulativeDistanceMeters ?? 0.0);
+    final recordedDistance = _resolveRecordedDistance(
+      points,
+      activity.laps,
+    );
+    final effectiveDistance = recordedDistance ?? gpsDistance;
 
     final avgPace = (effectiveDistance > 0 && duration.inMilliseconds > 0)
         ? (duration.inMilliseconds / 1000.0) / (effectiveDistance / 1000.0)
@@ -125,7 +127,6 @@ class SummaryCalculator {
     final points = activity.trackpoints;
     var gpsDistance = 0.0;
     Trackpoint? prevGps;
-    double? recordedDistance;
 
     for (final pt in points) {
       if (pt.latitude != null && pt.longitude != null) {
@@ -139,24 +140,9 @@ class SummaryCalculator {
         }
         prevGps = pt;
       }
-      if (pt.cumulativeDistanceMeters != null) {
-        recordedDistance = pt.cumulativeDistanceMeters;
-      }
     }
 
-    if (recordedDistance == null &&
-        activity.availableChannels.contains(Channel.distance) &&
-        activity.laps.isNotEmpty) {
-      var lapSum = 0.0;
-      var hasLapDist = false;
-      for (final lap in activity.laps) {
-        if (lap.distanceMeters != null) {
-          lapSum += lap.distanceMeters!;
-          hasLapDist = true;
-        }
-      }
-      if (hasLapDist) recordedDistance = lapSum;
-    }
+    final recordedDistance = _resolveRecordedDistance(points, activity.laps);
 
     final effectiveDistance =
         distanceOverrideMeters ?? recordedDistance ?? gpsDistance;
@@ -233,42 +219,12 @@ class SummaryCalculator {
           pt.cumulativeDistanceMeters ?? cumulative;
     }
 
-    final baseTotal = baseDistances.last;
-    final totalDurationMs =
-        points.last.timestamp.difference(points.first.timestamp).inMilliseconds;
-
-    final scaledPoints = <Trackpoint>[];
-    for (var i = 0; i < points.length; i++) {
-      final pt = points[i];
-      double scaledDist;
-      if (i == points.length - 1) {
-        scaledDist = safeTarget;
-      } else if (baseTotal > 0) {
-        scaledDist = baseDistances[i] * (safeTarget / baseTotal);
-      } else if (totalDurationMs > 0) {
-        final elapsedMs =
-            pt.timestamp.difference(points.first.timestamp).inMilliseconds;
-        scaledDist = safeTarget * (elapsedMs / totalDurationMs);
-      } else if (points.length > 1) {
-        scaledDist = safeTarget * (i / (points.length - 1));
-      } else {
-        scaledDist = safeTarget;
-      }
-
-      scaledPoints.add(
-        Trackpoint(
-          timestamp: pt.timestamp,
-          latitude: pt.latitude,
-          longitude: pt.longitude,
-          elevationMeters: pt.elevationMeters,
-          cumulativeDistanceMeters: scaledDist,
-          heartRateBpm: pt.heartRateBpm,
-          cadenceRpm: pt.cadenceRpm,
-          powerWatts: pt.powerWatts,
-          temperatureCelsius: pt.temperatureCelsius,
-        ),
-      );
-    }
+    final scaledPoints = _scalePointsByBaseDistances(
+      points,
+      baseDistances: baseDistances,
+      startDistanceMeters: 0.0,
+      targetEndMeters: safeTarget,
+    );
 
     final scaledLaps = <Lap>[];
     if (activity.laps.isNotEmpty) {
@@ -310,6 +266,127 @@ class SummaryCalculator {
         Channel.distance,
       },
     );
+  }
+
+  /// Proportionally distributes [spanMeters] across [points] starting from
+  /// [startDistanceMeters], using 2D Haversine segments (falling back to
+  /// elapsed time or sample index when GPS distance is zero). When [spanMeters]
+  /// is `null`, the 2D Haversine span is used directly.
+  static List<Trackpoint> distributeDistanceRange(
+    List<Trackpoint> points, {
+    double? spanMeters,
+    double startDistanceMeters = 0.0,
+    Trackpoint? precedingPoint,
+  }) {
+    if (points.isEmpty) return points;
+    final baseDistances = List<double>.filled(points.length, 0.0);
+    var cumulative = 0.0;
+    Trackpoint? prevGps = (precedingPoint != null &&
+            precedingPoint.latitude != null &&
+            precedingPoint.longitude != null)
+        ? precedingPoint
+        : null;
+
+    for (var i = 0; i < points.length; i++) {
+      final pt = points[i];
+      if (pt.latitude != null && pt.longitude != null) {
+        if (prevGps != null) {
+          cumulative += haversineMeters(
+            prevGps.latitude!,
+            prevGps.longitude!,
+            pt.latitude!,
+            pt.longitude!,
+          );
+        }
+        prevGps = pt;
+      }
+      baseDistances[i] = cumulative;
+    }
+
+    final safeSpan = math.max(0.0, spanMeters ?? baseDistances.last);
+    return _scalePointsByBaseDistances(
+      points,
+      baseDistances: baseDistances,
+      startDistanceMeters: startDistanceMeters,
+      targetEndMeters: startDistanceMeters + safeSpan,
+      precedingPoint: precedingPoint,
+    );
+  }
+
+  static double? _resolveRecordedDistance(
+    List<Trackpoint> points,
+    List<Lap> laps,
+  ) {
+    double? recordedDistance;
+    for (final pt in points) {
+      if (pt.cumulativeDistanceMeters != null) {
+        recordedDistance = pt.cumulativeDistanceMeters;
+      }
+    }
+    if (recordedDistance != null) return recordedDistance;
+
+    if (laps.isNotEmpty) {
+      var lapSum = 0.0;
+      var hasLapDist = false;
+      for (final lap in laps) {
+        if (lap.distanceMeters != null) {
+          lapSum += lap.distanceMeters!;
+          hasLapDist = true;
+        }
+      }
+      if (hasLapDist) return lapSum;
+    }
+    return null;
+  }
+
+  static List<Trackpoint> _scalePointsByBaseDistances(
+    List<Trackpoint> points, {
+    required List<double> baseDistances,
+    required double startDistanceMeters,
+    required double targetEndMeters,
+    Trackpoint? precedingPoint,
+  }) {
+    final baseTotal = baseDistances.last;
+    final span = math.max(0.0, targetEndMeters - startDistanceMeters);
+    final originTime = precedingPoint?.timestamp ?? points.first.timestamp;
+    final totalDurationMs =
+        points.last.timestamp.difference(originTime).inMilliseconds;
+
+    final scaledPoints = <Trackpoint>[];
+    for (var i = 0; i < points.length; i++) {
+      final pt = points[i];
+      final double scaledDist;
+      if (i == points.length - 1) {
+        scaledDist = startDistanceMeters + span;
+      } else if (baseTotal > 0) {
+        scaledDist = startDistanceMeters + baseDistances[i] * (span / baseTotal);
+      } else if (totalDurationMs > 0) {
+        final elapsedMs =
+            math.max(0, pt.timestamp.difference(originTime).inMilliseconds);
+        scaledDist = startDistanceMeters + span * (elapsedMs / totalDurationMs);
+      } else if (precedingPoint != null) {
+        scaledDist = startDistanceMeters + span * ((i + 1) / points.length);
+      } else if (points.length > 1) {
+        scaledDist = startDistanceMeters + span * (i / (points.length - 1));
+      } else {
+        scaledDist = startDistanceMeters + span;
+      }
+
+      scaledPoints.add(
+        Trackpoint(
+          timestamp: pt.timestamp,
+          latitude: pt.latitude,
+          longitude: pt.longitude,
+          elevationMeters: pt.elevationMeters,
+          cumulativeDistanceMeters: scaledDist,
+          heartRateBpm: pt.heartRateBpm,
+          cadenceRpm: pt.cadenceRpm,
+          powerWatts: pt.powerWatts,
+          temperatureCelsius: pt.temperatureCelsius,
+        ),
+      );
+    }
+    return scaledPoints;
   }
 
   /// Applies metadata edits, Distance Override, and Channel stripping to

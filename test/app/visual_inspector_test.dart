@@ -298,8 +298,11 @@ void main() {
         expect(find.byKey(const Key('osm-route-map')), findsOneWidget);
         expect(find.byKey(const Key('offline-route-canvas')), findsNothing);
         expect(
-          tester.widget<TileLayer>(find.byType(TileLayer)).userAgentPackageName,
-          'com.gabiuz.gpxlab',
+          tester
+              .widget<TileLayer>(find.byType(TileLayer))
+              .tileProvider
+              .headers['User-Agent'],
+          'flutter_map (com.gabiuz.gpxlab)',
         );
         expect(
           tester
